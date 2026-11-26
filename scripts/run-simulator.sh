@@ -33,7 +33,9 @@ fi
 echo "ビルド成功"
 
 xcrun simctl boot "$UDID" 2>/dev/null || true
-open -a Simulator
+# Simulator アプリの窓を開く。Xcode の版によっては Simulator.app が無いが、
+# 窓が無くてもシミュレーター自体は動くので、失敗しても先へ進む。
+open -a Simulator 2>/dev/null || echo "(Simulator アプリが見つからないため、窓は開かずに続けます)"
 xcrun simctl bootstatus "$UDID" -b > /dev/null
 xcrun simctl install "$UDID" build/DerivedData/Build/Products/Debug-iphonesimulator/KadaiNotify.app
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
