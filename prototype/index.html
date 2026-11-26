@@ -1,0 +1,729 @@
+<title>課題通知 試作</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: 左に iPhone の枠(アプリ本体)、右に「時計・ホーム画面・通知」の操作パネル。狭い画面では縦に積む */
+:root {
+  --bg: #EDF0F5;
+  --ink: #16181D;
+  --muted: #667085;
+  --line: #D8DDE6;
+  --card: #FFFFFF;
+  --app: #F2F3F7;
+  --accent: #1F62D9;
+  --red: #D93B40;
+  --orange: #E0620C;
+  --green: #2B9A62;
+  --frame: #1B1D22;
+  --banner: rgba(250, 251, 253, .96);
+  --shadow: 0 10px 30px rgba(20, 30, 60, .12);
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1218; --ink: #E8EBF2; --muted: #98A0B3; --line: #2A303C; --card: #1A1E27; --app: #0B0D12;
+    --accent: #5B8EF0; --red: #F0686C; --orange: #F5934F; --green: #4CC38A; --frame: #2B2F38;
+    --banner: rgba(38, 42, 52, .96); --shadow: 0 10px 30px rgba(0, 0, 0, .4); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1218; --ink: #E8EBF2; --muted: #98A0B3; --line: #2A303C; --card: #1A1E27; --app: #0B0D12;
+  --accent: #5B8EF0; --red: #F0686C; --orange: #F5934F; --green: #4CC38A; --frame: #2B2F38;
+  --banner: rgba(38, 42, 52, .96); --shadow: 0 10px 30px rgba(0, 0, 0, .4); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); line-height: 1.5; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.intro { display: grid; gap: 4px; margin-bottom: 20px; max-width: 68ch; }
+.intro h1 { margin: 0; font-size: 1.6rem; letter-spacing: .01em; text-wrap: balance; }
+.intro p { margin: 0; color: var(--muted); }
+.stage { display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 860px) { .stage { grid-template-columns: minmax(0, 1fr); } .phone { margin: 0 auto; } }
+
+/* ---------- iPhone の枠 ---------- */
+.phone { width: 100%; max-width: 390px; height: 760px; background: var(--frame); border-radius: 48px; padding: 12px; box-shadow: var(--shadow); }
+.screen { position: relative; height: 100%; border-radius: 38px; overflow: hidden; background: var(--app); display: flex; flex-direction: column; }
+.status { display: flex; justify-content: space-between; padding: 12px 26px 4px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.appbody { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 14px 16px; }
+.nav { display: flex; align-items: center; justify-content: space-between; min-height: 38px; }
+.nav h2 { margin: 2px 0 8px; font-size: 28px; font-weight: 700; }
+.linkbtn { background: none; border: 0; color: var(--accent); padding: 6px 2px; font-size: 15px; }
+.linkbtn[disabled] { color: var(--muted); cursor: default; }
+.tabbar { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); background: var(--card); padding: 6px 0 14px; }
+.tab { background: none; border: 0; font-size: 11px; color: var(--muted); display: grid; justify-items: center; gap: 2px; }
+.tab .ico { font-size: 18px; line-height: 1; }
+.tab[aria-selected="true"] { color: var(--accent); }
+
+.sec { margin: 14px 0 0; }
+.sechead { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); padding: 0 6px 6px; letter-spacing: .02em; }
+.sechead.red { color: var(--red); font-weight: 600; }
+.group { background: var(--card); border-radius: 12px; overflow: hidden; }
+.cell { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); min-width: 0; }
+.cell:first-child { border-top: 0; }
+.secfoot { font-size: 11.5px; color: var(--muted); padding: 6px 6px 0; }
+.row { cursor: pointer; }
+.row:hover { background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.check { background: none; border: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; padding: 0; }
+.check span { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; font-size: 13px; color: #fff; }
+.check.on span { background: var(--green); border-color: var(--green); }
+.rowmain { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.subj { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ttl { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+.ttl.done { text-decoration: line-through; color: var(--muted); }
+.due { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rem { font-size: 13px; font-weight: 700; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.c-overdue { color: var(--red); } .c-today { color: var(--orange); } .c-tomorrow { color: var(--ink); } .c-later { color: var(--muted); }
+.empty { text-align: center; color: var(--muted); padding: 40px 12px; display: grid; gap: 6px; }
+.empty b { color: var(--ink); font-size: 16px; }
+.warn { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
+.warn b { display: block; }
+
+/* フォーム */
+.field { display: grid; gap: 4px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.field:first-child { border-top: 0; }
+.field label, .lbl { font-size: 12px; color: var(--muted); }
+.field input[type="text"], .field input[type="datetime-local"], .field input[type="date"], .field input[type="time"], .field select, .field textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--app); min-width: 0; }
+.field textarea { resize: vertical; min-height: 120px; font-family: var(--mono); font-size: 12px; }
+.inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--app); border-radius: 999px; padding: 3px 10px; font-size: 12px; display: inline-flex; gap: 5px; align-items: center; }
+.chip.sel { border-color: var(--accent); color: var(--accent); }
+.switch { position: relative; width: 46px; height: 28px; flex: none; }
+.switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.switch input:checked + span { background: var(--green); }
+.switch input:checked + span::after { transform: translateX(18px); }
+.rule { display: grid; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.rule .line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rule select, .rule input { border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; background: var(--app); }
+.rule input[type="number"] { width: 64px; }
+.del { background: none; border: 0; color: var(--red); font-size: 13px; margin-left: auto; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid var(--line); }
+.btn { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 7px 12px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--red); }
+.btn.full { width: 100%; }
+.colors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 12px; }
+.swatch { width: 38px; height: 38px; border-radius: 50%; border: 0; justify-self: center; display: grid; place-items: center; color: #fff; font-weight: 700; }
+.tag { font-size: 10.5px; font-weight: 700; }
+.tag.new { color: var(--green); } .tag.dup { color: var(--muted); } .tag.upd { color: var(--orange); }
+.err { color: var(--red); font-size: 12px; }
+.code { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* シート(下から出る画面) */
+.sheet { position: absolute; inset: 0; background: rgba(0,0,0,.28); display: flex; align-items: flex-end; z-index: 5; }
+.sheetbody { background: var(--app); width: 100%; height: 94%; border-radius: 14px 14px 0 0; display: flex; flex-direction: column; }
+.sheetnav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.sheetnav h3 { margin: 0; font-size: 15px; }
+.sheetnav .linkbtn:last-child { justify-self: end; font-weight: 700; }
+.sheetscroll { flex: 1; overflow-y: auto; padding: 0 14px 24px; }
+
+/* 通知バナー */
+.banner { position: absolute; top: 40px; left: 10px; right: 10px; background: var(--banner); border-radius: 16px; padding: 10px 12px; box-shadow: var(--shadow);
+  z-index: 8; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; font-size: 12.5px; cursor: pointer; animation: drop .25s ease-out; }
+.banner .t { font-weight: 700; }
+.banner .b { white-space: pre-line; color: var(--ink); max-height: 5.8em; overflow: hidden; }
+@keyframes drop { from { transform: translateY(-20px); opacity: .3; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .banner { animation: none; } }
+.appicon { width: 34px; height: 34px; border-radius: 8px; background: #1F62D9; display: grid; place-items: center; position: relative; }
+.appicon i { width: 60%; height: 58%; background: #fff; border-radius: 3px; border-top: 5px solid #E5484D; }
+.expired { position: absolute; inset: 0; background: var(--app); z-index: 6; display: grid; place-content: center; text-align: center; gap: 10px; padding: 30px; }
+
+/* ---------- 右の操作パネル ---------- */
+.side { display: grid; gap: 16px; min-width: 0; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.panel h2 { margin: 0; font-size: 13px; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.clock { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.home { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
+@media (max-width: 480px) { .home { grid-template-columns: minmax(0, 1fr); } }
+.bigicon { width: 64px; height: 64px; border-radius: 15px; background: #1F62D9; position: relative; display: grid; place-items: center; }
+.bigicon i { width: 62%; height: 58%; background: #fff; border-radius: 5px; border-top: 9px solid #E5484D; }
+.badge { position: absolute; top: -7px; right: -7px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: #E5484D; color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+.iconlbl { font-size: 11px; text-align: center; margin-top: 4px; }
+.widget { background: var(--app); border-radius: 18px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.wrow { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.wrow .bar { height: 28px; border-radius: 2px; }
+.wrow .wt { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wrow .ws { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list { display: grid; gap: 0; max-height: 340px; overflow-y: auto; border-top: 1px solid var(--line); }
+.nitem { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.nitem time { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.nitem .t { font-weight: 600; }
+.nitem .b { white-space: pre-line; color: var(--muted); overflow-wrap: anywhere; }
+.kind { font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.k-task { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+.k-nightly { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--orange); }
+.k-expiry { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+.note { font-size: 12px; color: var(--muted); }
+.meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <h1>課題通知 試作</h1>
+    <p>iPhone アプリ「KadaiNotify」の動きを、ブラウザの中で試せるようにしたものです。通知のタイミングの計算は Swift 版と同じ手順です。右の「時計」を進めると、予約された通知が届きます。入っている提出物はサンプルで、データはこのブラウザの中だけに保存されます。</p>
+  </div>
+  <div class="stage">
+    <div class="phone"><div class="screen" id="screen"></div></div>
+    <aside class="side" id="side"></aside>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ===== 時刻と文字の整形(KadaiCore/DeadlineText.swift と同じ規則) =====
+const MIN = 60e3, HOUR = 3600e3, DAY = 86400e3;
+const WD = ["日", "月", "火", "水", "木", "金", "土"];
+const PALETTE = [["#E5484D","赤"],["#F76B15","オレンジ"],["#E2A336","黄"],["#30A46C","緑"],["#12A594","青緑"],["#0090FF","青"],["#6E56CF","紫"],["#D6409F","ピンク"]];
+const pad = n => String(n).padStart(2, "0");
+const sod = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const addDays = (t, n) => { const d = new Date(t); d.setDate(d.getDate() + n); return d.getTime(); };
+const atTime = (day, h, m) => { const d = new Date(day); d.setHours(h, m, 0, 0); return d.getTime(); };
+const dayDiff = (a, b) => Math.round((sod(b) - sod(a)) / DAY);
+const fmtTime = t => { const d = new Date(t); return `${d.getHours()}:${pad(d.getMinutes())}`; };
+const fmtDT = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()}(${WD[d.getDay()]}) ${fmtTime(t)}`; };
+const relDay = (t, now) => { const k = dayDiff(now, t); return k === 0 ? "今日 " + fmtTime(t) : k === 1 ? "明日 " + fmtTime(t) : fmtDT(t); };
+function remaining(due, now) {
+  const s = (due - now) / 1000, m = Math.floor(Math.abs(s) / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (s < 0) return m < 60 ? `${Math.max(m, 1)} 分超過` : h < 24 ? `${h} 時間超過` : `${d} 日超過`;
+  if (m < 1) return "まもなく";
+  if (m < 60) return `あと ${m} 分`;
+  if (h < 24) return `あと ${h} 時間`;
+  if (d < 2) { const r = h % 24; return r ? `あと 1 日 ${r} 時間` : "あと 1 日"; }
+  return `あと ${d} 日`;
+}
+const groupOf = (due, now) => due <= now ? "overdue" : dayDiff(now, due) === 0 ? "today" : dayDiff(now, due) === 1 ? "tomorrow" : "later";
+const GROUPS = [["overdue", "期限切れ"], ["today", "今日"], ["tomorrow", "明日"], ["later", "それ以降"]];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uid = () => Math.random().toString(36).slice(2, 10);
+const toInput = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const toDateInput = t => toInput(t).slice(0, 10);
+const minToInput = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const inputToMin = s => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
+
+// ===== 通知ルール(ReminderRule.swift) =====
+const rule = (kind, amount, hour = 21, minute = 0) => ({ id: uid(), kind, amount, hour, minute });
+const ruleLabel = r => r.kind === "days" ? `${r.amount === 0 ? "当日" : r.amount + " 日前"}の ${r.hour}:${pad(r.minute)}` : `${r.amount} 時間前`;
+const rulesSummary = rs => rs.length ? rs.map(ruleLabel).join("、") : "通知しない";
+const fireAt = (r, due) => r.kind === "days" ? atTime(addDays(sod(due), -r.amount), r.hour, r.minute) : due - r.amount * HOUR;
+
+// ===== 状態 =====
+let S;
+function sampleState() {
+  const now = Math.floor(Date.now() / MIN) * MIN;
+  const subjects = [
+    { id: "s1", name: "情報システム", color: "#0090FF", rules: null },
+    { id: "s2", name: "論理回路", color: "#30A46C", rules: null },
+    { id: "s3", name: "PD入門", color: "#E5484D", rules: [rule("days", 7), rule("days", 3), rule("days", 1)] },
+    { id: "s4", name: "知能情報入門", color: "#6E56CF", rules: null },
+  ];
+  const task = (subjectId, title, due, memo = "") => ({ id: uid(), subjectId, title, due, memo, done: false, completedAt: null, rules: null, templateId: null });
+  const tasks = [
+    task("s1", "第7回レポート", now - 5 * HOUR, "Moodle に PDF で提出"),
+    task("s2", "演習課題5", atTime(sod(now) + (new Date(now).getHours() >= 20 ? DAY : 0), 23, 59)),
+    task("s3", "振り返りシート", atTime(addDays(sod(now), 2), 8, 50)),
+    task("s1", "第8回レポート", atTime(addDays(sod(now), 5), 17, 0), "A4 2 枚"),
+  ];
+  const doneTask = task("s2", "演習課題4", now - 2 * DAY); doneTask.done = true; doneTask.completedAt = now - 3 * DAY;
+  tasks.push(doneTask);
+  const templates = [{ id: "t1", subjectId: "s4", pattern: "第{n}回 小テスト", weekday: 4, hour: 17, minute: 0, start: sod(now), end: null, active: true, lastGen: null }];
+  return {
+    v: 1, now, installAt: now - 2 * DAY, subjects, tasks, templates, delivered: [],
+    settings: { globalRules: [rule("days", 3), rule("days", 1)], nightly: true, nightlyMin: 21 * 60, badge: true, defaultDueMin: 8 * 60 + 50 },
+  };
+}
+const UI = { tab: "list", sheet: null, showDone: false, banner: null, importText: "", importResult: null };
+function load() { try { const raw = localStorage.getItem("kadai-proto"); if (raw) { const s = JSON.parse(raw); if (s.v === 1) return s; } } catch (e) {} return sampleState(); }
+function save() { try { localStorage.setItem("kadai-proto", JSON.stringify(S)); } catch (e) {} }
+
+const subj = id => S.subjects.find(s => s.id === id);
+const subjName = t => subj(t.subjectId)?.name ?? "";
+const rulesFor = t => t.rules ?? subj(t.subjectId)?.rules ?? S.settings.globalRules;
+const expiry = () => S.installAt + 7 * DAY;
+const expMsg = e => `署名の期限は ${fmtDT(e)} です。Mac の Xcode から入れ直してください`;
+function findOrCreateSubject(name) {
+  name = name.trim(); if (!name) return null;
+  const key = v => norm(v).toLowerCase().replace(/\s/g, "");
+  let s = S.subjects.find(x => key(x.name) === key(name));
+  if (!s) {
+    const used = S.subjects.map(x => x.color.toUpperCase());
+    const color = PALETTE.map(p => p[0]).reduce((best, c) => used.filter(u => u === c).length < used.filter(u => u === best).length ? c : best, PALETTE[0][0]);
+    s = { id: uid(), name, color, rules: null }; S.subjects.push(s);
+  }
+  return s;
+}
+
+// ===== 通知の計画(NotificationPlanner.swift と同じ手順) =====
+const mk = t => Math.floor(t / MIN);
+function plan(now) {
+  const st = S.settings, H = Math.floor(st.nightlyMin / 60), M = st.nightlyMin % 60;
+  const tasks = S.tasks.filter(t => !t.done).sort((a, b) => a.due - b.due);
+  const nights = [];
+  if (st.nightly && tasks.length) for (let k = 0; nights.length < 14 && k <= 15; k++) { const t = atTime(addDays(sod(now), k), H, M); if (t > now) nights.push(t); }
+  const nightKeys = new Set(nights.map(mk)), folded = new Map();
+  let individual = [];
+  for (const t of tasks) {
+    const used = new Set();
+    for (const r of rulesFor(t)) {
+      const f = fireAt(r, t.due);
+      if (!(f > now && f < t.due)) continue;
+      const k = mk(f); if (used.has(k)) continue; used.add(k);
+      if (nightKeys.has(k)) { if (!folded.has(k)) folded.set(k, new Set()); folded.get(k).add(t.id); }
+      else individual.push({ t, f });
+    }
+  }
+  individual.sort((a, b) => a.f - b.f);
+  const out = individual.slice(0, 49).map(({ t, f }) => ({ id: `task-${t.id}-${mk(f)}`, at: f, kind: "task", taskId: t.id,
+    title: subjName(t) ? `【${subjName(t)}】${t.title}` : t.title, body: `締め切り ${fmtDT(t.due)}(${remaining(t.due, f)})` }));
+  const exp = expiry(); let expKey = null;
+  if (exp > now) {
+    const f = atTime(addDays(sod(exp), -1), H, M);
+    if (f > now) { if (nightKeys.has(mk(f))) expKey = mk(f); else out.push({ id: "signing-expiry", at: f, kind: "expiry", title: "アプリの署名期限が近づいています", body: expMsg(exp) }); }
+  }
+  nights.forEach((n, i) => {
+    const hi = folded.get(mk(n)) || new Set(), over = tasks.filter(t => t.due <= n).length;
+    const rank = t => t.due <= n ? 0 : hi.has(t.id) ? 1 : 2;
+    const ordered = tasks.map((t, j) => [t, j]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(x => x[0]);
+    const lines = [];
+    if (expKey === mk(n)) lines.push("⚠️ " + expMsg(exp));
+    for (const t of ordered.slice(0, 4)) {
+      const name = subjName(t) ? `${subjName(t)} ${t.title}` : t.title;
+      lines.push(t.due <= n ? `⚠️ 期限切れ ${name}` : `${hi.has(t.id) ? "🔔" : "・"} ${relDay(t.due, n)} ${name}`);
+    }
+    if (tasks.length > 4) lines.push(`ほか ${tasks.length - 4} 件`);
+    if (i === nights.length - 1) lines.push("(通知の予約はここまで。アプリを開くと更新されます)");
+    out.push({ id: "nightly-" + n, at: n, kind: "nightly", title: over ? `未完了の提出物 ${tasks.length} 件(期限切れ ${over})` : `未完了の提出物 ${tasks.length} 件`, body: lines.join("\n") });
+  });
+  return out.sort((a, b) => a.at - b.at);
+}
+
+// ===== 毎週の繰り返し(Recurrence.swift) =====
+function generateRecurring(now) {
+  for (const tp of S.templates) {
+    if (!tp.active) continue;
+    const start = sod(tp.start), first = addDays(start, (tp.weekday - new Date(start).getDay() + 7) % 7);
+    const limit = now + 14 * DAY, end = tp.end != null ? sod(tp.end) : null;
+    for (let w = 0; w < 1000; w++) {
+      const due = atTime(addDays(first, w * 7), tp.hour, tp.minute);
+      if (due > limit) break;
+      if (end != null && sod(due) > end) break;
+      if (due <= now || (tp.lastGen != null && due <= tp.lastGen)) continue;
+      S.tasks.push({ id: uid(), subjectId: tp.subjectId, title: tp.pattern.split("{n}").join(String(w + 1)), due, memo: "", done: false, completedAt: null, rules: null, templateId: tp.id });
+      tp.lastGen = due;
+    }
+  }
+}
+
+// ===== 取り込み(ImportParser.swift) =====
+const norm = s => s.normalize("NFKC").replace(/−/g, "-");
+function parseDate(text, defMin) {
+  const parts = text.replace("T", " ").split(/\s+/).filter(Boolean);
+  if (parts.length < 1 || parts.length > 2) return null;
+  const dp = parts[0].split(/[-/.]/).map(Number);
+  if (dp.length !== 3 || dp.some(isNaN)) return null;
+  let h = Math.floor(defMin / 60), m = defMin % 60;
+  if (parts.length === 2) { const tp = parts[1].split(":").map(Number); if (tp.length < 2 || tp.length > 3 || tp.some(isNaN)) return null; [h, m] = tp; }
+  if (dp[1] < 1 || dp[1] > 12 || dp[2] < 1 || dp[2] > 31 || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  const d = new Date(dp[0], dp[1] - 1, dp[2], h, m);
+  if (d.getFullYear() !== dp[0] || d.getMonth() !== dp[1] - 1 || d.getDate() !== dp[2]) return null;
+  return { due: d.getTime(), hasTime: parts.length === 2 };
+}
+function parseImport(text) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const head = lines.findIndex(l => norm(l).trim().toLowerCase() === "#kadai v1");
+  if (head < 0) return { header: false, items: [], errors: [] };
+  const items = [], errors = [];
+  for (let i = head + 1; i < lines.length; i++) {
+    const raw = lines[i], line = norm(raw).trim(), no = i + 1;
+    if (!line || line.startsWith("#") || line.startsWith("```")) continue;
+    const c = line.split("|").map(x => x.trim());
+    if (c.length >= 2 && c[0] === "科目" && c[1] === "課題名") continue;
+    if (c.length < 3) { errors.push({ no, raw, reason: "「|」で区切られた項目が 3 つ未満です" }); continue; }
+    if (!c[0]) { errors.push({ no, raw, reason: "科目が空です" }); continue; }
+    if (!c[1]) { errors.push({ no, raw, reason: "課題名が空です" }); continue; }
+    const d = parseDate(c[2], S.settings.defaultDueMin);
+    if (!d) { errors.push({ no, raw, reason: `締め切り「${c[2]}」を日付として読めません` }); continue; }
+    items.push({ subject: c[0], title: c[1], due: d.due, hasTime: d.hasTime, memo: c.slice(3).filter(Boolean).join(" ") });
+  }
+  const key = s => norm(s).toLowerCase().replace(/\s/g, "");
+  const same = (a, b) => key(a.subject) === key(b.subject) && key(a.title) === key(b.title) && sod(a.due) === sod(b.due);
+  const existing = S.tasks.map(t => ({ id: t.id, subject: subjName(t), title: t.title, due: t.due }));
+  items.forEach((it, i) => {
+    if (items.slice(0, i).some(p => same(p, it))) { it.match = "dupself"; }
+    else { const hit = existing.find(e => same(e, it)); it.match = !hit ? "new" : (Math.abs(hit.due - it.due) < MIN || !it.hasTime) ? "dup" : "upd"; it.existingId = hit?.id; }
+    it.selected = it.match === "new" || it.match === "upd";
+  });
+  return { header: true, items, errors };
+}
+const CLAUDE_PROMPT = `学生ポータルの TODO / 課題一覧から、まだ締め切りが来ていない提出物を全部探して、
+次の形式だけを出力してください(説明文は不要)。
+
+#kadai v1
+科目 | 課題名 | 締め切り(YYYY-MM-DD HH:MM、時刻がわからなければ YYYY-MM-DD) | メモ
+
+- 1 行に 1 件
+- メモには提出方法など分かることを短く。なければ空欄
+- 「|」は区切り以外に使わない`;
+function sampleImportText() {
+  const d = n => toDateInput(addDays(sod(S.now), n));
+  return `以下が提出物の一覧です。\n#kadai v1\n情報システム | 第8回レポート | ${d(5)} 17:00 | A4 2 枚\n知能情報入門 | 調べ学習ワークシート | ${d(4)} 23:59 | Moodle\n論理回路 | 演習課題6 | ${d(9)} |\nIoT | センサー実習レポート | ${d(11)} 13:00 | 紙で提出\nPD入門 | 振り返りシート | あした |`;
+}
+
+// ===== まとめて最新にする(Refresher.swift) =====
+function refresh() { generateRecurring(S.now); save(); render(); }
+function advanceTo(t) {
+  const fired = plan(S.now).filter(p => p.at > S.now && p.at <= t);
+  S.now = t;
+  for (const p of fired) S.delivered.unshift(p);
+  S.delivered = S.delivered.slice(0, 40);
+  if (fired.length) { UI.banner = fired[fired.length - 1]; clearTimeout(advanceTo.timer); advanceTo.timer = setTimeout(() => { UI.banner = null; renderPhone(); }, 6000); }
+  refresh();
+}
+function toggleDone(id) {
+  const t = S.tasks.find(x => x.id === id); if (!t) return;
+  t.done = !t.done; t.completedAt = t.done ? S.now : null;
+  if (t.done) S.delivered = S.delivered.filter(p => p.taskId !== id);
+  refresh();
+}
+
+// ===== 画面(iPhone の中) =====
+function rowHTML(t) {
+  const g = groupOf(t.due, S.now), s = subj(t.subjectId);
+  return `<div class="cell row" data-act="edit" data-id="${t.id}">
+    <button class="check ${t.done ? "on" : ""}" data-act="toggle" data-id="${t.id}" aria-label="${t.done ? "未完了に戻す" : "完了にする"}"><span>${t.done ? "✓" : ""}</span></button>
+    <div class="rowmain">
+      <div class="subj"><i class="dot" style="background:${s?.color ?? "#999"}"></i>${esc(s?.name ?? "科目なし")}${t.templateId ? " ・ 繰り返し" : ""}</div>
+      <div class="ttl ${t.done ? "done" : ""}">${esc(t.title)}</div>
+      <div class="due">${fmtDT(t.due)}</div>
+    </div>
+    ${t.done ? "" : `<div class="rem c-${g}">${remaining(t.due, S.now)}</div>`}
+  </div>`;
+}
+function listView() {
+  const pending = S.tasks.filter(t => !t.done).sort((a, b) => a.due - b.due);
+  const done = S.tasks.filter(t => t.done).sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
+  const exp = expiry();
+  let h = `<div class="nav"><button class="linkbtn" data-act="open-import">⤓ 取り込み</button><button class="linkbtn" data-act="new-task" aria-label="追加" style="font-size:24px">+</button></div><h2 class="nav" style="display:block;margin:0">提出物</h2>`;
+  if (exp - S.now < 2 * DAY) h += `<div class="sec"><div class="group"><div class="cell warn"><span style="color:var(--orange)">⚠︎</span><div><b>アプリの署名期限が近づいています</b>期限: ${fmtDT(exp)}。Mac の Xcode から入れ直してください(データは消えません)。</div></div></div></div>`;
+  if (!pending.length) h += `<div class="empty"><b>提出物はありません</b>右上の + で追加、左上の「取り込み」で Claude の出力から一括登録できます。</div>`;
+  for (const [g, label] of GROUPS) {
+    const items = pending.filter(t => groupOf(t.due, S.now) === g);
+    if (items.length) h += `<div class="sec"><div class="sechead ${g === "overdue" ? "red" : ""}">${label}(${items.length})</div><div class="group">${items.map(rowHTML).join("")}</div></div>`;
+  }
+  if (done.length) h += `<div class="sec"><div class="sechead"><button class="linkbtn" style="font-size:12px" data-act="toggle-done-list">完了済み(${done.length}) ${UI.showDone ? "▾" : "▸"}</button></div>${UI.showDone ? `<div class="group">${done.map(rowHTML).join("")}</div>` : ""}</div>`;
+  return h;
+}
+function subjectsView() {
+  let h = `<div class="nav"><span></span><button class="linkbtn" data-act="new-subject" aria-label="科目を追加" style="font-size:24px">+</button></div><h2 class="nav" style="display:block;margin:0">科目・繰り返し</h2>`;
+  h += `<div class="sec"><div class="sechead">科目</div><div class="group">` + (S.subjects.length ? S.subjects.slice().sort((a, b) => a.name.localeCompare(b.name, "ja")).map(s =>
+    `<div class="cell row" data-act="edit-subject" data-id="${s.id}"><i class="dot" style="background:${s.color};width:12px;height:12px"></i><div class="rowmain"><div>${esc(s.name)}</div>${s.rules ? `<div class="due">🔔 ${esc(rulesSummary(s.rules))}</div>` : ""}</div><div class="due">未完了 ${S.tasks.filter(t => t.subjectId === s.id && !t.done).length}</div></div>`).join("")
+    : `<div class="cell due">まだ科目がありません。</div>`) + `</div><div class="secfoot">科目ごとに色と通知のタイミングを決められます。</div></div>`;
+  h += `<div class="sec"><div class="sechead">毎週の繰り返し課題</div><div class="group">` + S.templates.map(tp => {
+    const s = subj(tp.subjectId);
+    return `<div class="cell row" data-act="edit-template" data-id="${tp.id}"><i class="dot" style="background:${s?.color ?? "#999"};width:12px;height:12px"></i><div class="rowmain"><div>${esc(tp.pattern)}</div><div class="due">${esc(s?.name ?? "科目なし")} ・ 毎週 ${WD[tp.weekday]}曜 ${tp.hour}:${pad(tp.minute)}</div></div>${tp.active ? "" : `<span class="due" style="color:var(--orange)">停止中</span>`}</div>`;
+  }).join("") + `<div class="cell"><button class="linkbtn" data-act="new-template">＋ 繰り返しを追加</button></div></div><div class="secfoot">締め切りが 14 日以内の回が、自動で提出物に追加されます。</div></div>`;
+  return h;
+}
+function rulesEditor(rules, path) {
+  return rules.map((r, i) => `<div class="rule"><div class="line">
+      <select data-rule="${path}" data-i="${i}" data-k="kind" aria-label="種類"><option value="days" ${r.kind === "days" ? "selected" : ""}>◯日前の時刻</option><option value="hours" ${r.kind === "hours" ? "selected" : ""}>◯時間前</option></select>
+      <input type="number" min="${r.kind === "days" ? 0 : 1}" max="${r.kind === "days" ? 30 : 72}" value="${r.amount}" data-rule="${path}" data-i="${i}" data-k="amount" aria-label="数">
+      <span class="due">${r.kind === "days" ? "日前の" : "時間前"}</span>
+      ${r.kind === "days" ? `<input type="time" value="${pad(r.hour)}:${pad(r.minute)}" data-rule="${path}" data-i="${i}" data-k="time" aria-label="時刻">` : ""}
+      <button class="del" data-act="rule-del" data-path="${path}" data-i="${i}">削除</button></div></div>`).join("")
+    + (rules.length ? "" : `<div class="rule due">通知しない</div>`)
+    + `<div class="btnrow"><button class="btn" data-act="rule-add" data-path="${path}" data-kind="days">＋ ◯日前の時刻</button><button class="btn" data-act="rule-add" data-path="${path}" data-kind="hours">＋ ◯時間前</button></div>`;
+}
+function settingsView() {
+  const st = S.settings, n = plan(S.now).length, exp = expiry();
+  return `<h2 class="nav" style="display:block;margin:8px 0 0">設定</h2>
+  <div class="sec"><div class="sechead">提出物ごとの通知(全体の設定)</div><div class="group">${rulesEditor(st.globalRules, "global")}</div><div class="secfoot">科目や提出物ごとに別の設定をしていなければ、この設定で通知します。</div></div>
+  <div class="sec"><div class="group">
+    <div class="field"><div class="inline"><span>毎晩のまとめ通知</span><label class="switch"><input type="checkbox" id="set-nightly" ${st.nightly ? "checked" : ""}><span></span></label></div></div>
+    ${st.nightly ? `<div class="field"><div class="inline"><label for="set-nightly-time">時刻</label><input type="time" id="set-nightly-time" value="${minToInput(st.nightlyMin)}" style="width:auto"></div></div>` : ""}
+  </div><div class="secfoot">未完了が 1 件でもある限り毎晩まとめて知らせます。同じ時刻の個別の通知はこの 1 通にまとめます。</div></div>
+  <div class="sec"><div class="group">
+    <div class="field"><div class="inline"><span>アイコンに未完了の件数を出す</span><label class="switch"><input type="checkbox" id="set-badge" ${st.badge ? "checked" : ""}><span></span></label></div></div>
+    <div class="field"><div class="inline"><label for="set-default">時刻がわからない締め切り</label><input type="time" id="set-default" value="${minToInput(st.defaultDueMin)}" style="width:auto"></div></div>
+  </div></div>
+  <div class="sec"><div class="sechead">通知の状態</div><div class="group">
+    <div class="field"><div class="inline"><span>予約中の通知</span><b style="font-variant-numeric:tabular-nums">${n} / 64 件</b></div></div>
+  </div></div>
+  <div class="sec"><div class="sechead">学生ポータルからの取り込み</div><div class="group"><div class="btnrow" style="border:0"><button class="btn" data-act="copy-prompt" id="copy-btn">Claude への頼み方をコピー</button></div></div></div>
+  <div class="sec"><div class="sechead">アプリの署名</div><div class="group">
+    <div class="field"><div class="inline"><span>期限</span><span class="due">${fmtDT(exp)}</span></div></div>
+    <div class="btnrow"><button class="btn" data-act="reinstall">Mac から入れ直した(期限を 7 日延ばす)</button></div>
+  </div><div class="secfoot">無料の Apple ID では 7 日ごとに入れ直しが必要です。期限の前日の夜にお知らせします。</div></div>`;
+}
+
+// ----- シート -----
+function taskSheet() {
+  const sh = UI.sheet, f = sh.form;
+  return sheetFrame(sh.id ? "提出物を編集" : "提出物を追加", f.title.trim() && f.subject.trim(), `
+    <div class="sec"><div class="sechead">科目</div><div class="group">
+      <div class="field"><input type="text" id="f-subject" value="${esc(f.subject)}" placeholder="科目名(例: 情報システム)" aria-label="科目名"></div>
+      ${S.subjects.length ? `<div class="field"><div class="chips">${S.subjects.map(s => `<button class="chip ${s.name === f.subject ? "sel" : ""}" data-act="pick-subject" data-name="${esc(s.name)}"><i class="dot" style="background:${s.color}"></i>${esc(s.name)}</button>`).join("")}</div></div>` : ""}
+    </div></div>
+    <div class="sec"><div class="sechead">提出物</div><div class="group">
+      <div class="field"><input type="text" id="f-title" value="${esc(f.title)}" placeholder="課題名(例: 第8回レポート)" aria-label="課題名"></div>
+      <div class="field"><label for="f-due">締め切り</label><input type="datetime-local" id="f-due" value="${toInput(f.due)}"></div>
+      <div class="field"><input type="text" id="f-memo" value="${esc(f.memo)}" placeholder="メモ(提出方法など)" aria-label="メモ"></div>
+    </div></div>
+    <div class="sec"><div class="sechead">通知</div><div class="group">
+      <div class="field"><div class="inline"><span>この課題だけ通知を変える</span><label class="switch"><input type="checkbox" id="f-custom" ${f.custom ? "checked" : ""}><span></span></label></div></div>
+      ${f.custom ? rulesEditor(f.rules, "form") : `<div class="field due">いまの設定: ${esc(rulesSummary(S.subjects.find(s => s.name === f.subject.trim())?.rules ?? S.settings.globalRules))}</div>`}
+    </div><div class="secfoot">オフのときは科目の設定、科目に設定がなければ全体の設定を使います。</div></div>
+    ${sh.id ? `<div class="sec"><button class="btn danger full" data-act="delete-task">この提出物を削除</button></div>` : ""}`);
+}
+function subjectSheet() {
+  const f = UI.sheet.form;
+  return sheetFrame(UI.sheet.id ? "科目を編集" : "科目を追加", f.name.trim(), `
+    <div class="sec"><div class="sechead">科目名</div><div class="group"><div class="field"><input type="text" id="f-name" value="${esc(f.name)}" placeholder="例: 情報システム" aria-label="科目名"></div></div></div>
+    <div class="sec"><div class="sechead">色</div><div class="group"><div class="colors">${PALETTE.map(([c, n]) => `<button class="swatch" style="background:${c}" data-act="pick-color" data-color="${c}" aria-label="${n}">${f.color === c ? "✓" : ""}</button>`).join("")}</div></div></div>
+    <div class="sec"><div class="sechead">通知</div><div class="group">
+      <div class="field"><div class="inline"><span>この科目だけ通知を変える</span><label class="switch"><input type="checkbox" id="f-custom" ${f.custom ? "checked" : ""}><span></span></label></div></div>
+      ${f.custom ? rulesEditor(f.rules, "form") : ""}
+    </div><div class="secfoot">例: 重いレポートが多い科目は「7 日前の 21:00」を足す。</div></div>
+    ${UI.sheet.error ? `<div class="sec err">${esc(UI.sheet.error)}</div>` : ""}
+    ${UI.sheet.id ? `<div class="sec"><button class="btn danger full" data-act="delete-subject">この科目を削除</button></div>` : ""}`);
+}
+function templateSheet() {
+  const f = UI.sheet.form;
+  return sheetFrame(UI.sheet.id ? "繰り返しを編集" : "繰り返しを追加", f.subject.trim() && f.pattern.trim(), `
+    <div class="sec"><div class="sechead">科目</div><div class="group"><div class="field"><input type="text" id="f-subject" value="${esc(f.subject)}" placeholder="科目名" aria-label="科目名"></div>
+      ${S.subjects.length ? `<div class="field"><div class="chips">${S.subjects.map(s => `<button class="chip ${s.name === f.subject ? "sel" : ""}" data-act="pick-subject" data-name="${esc(s.name)}"><i class="dot" style="background:${s.color}"></i>${esc(s.name)}</button>`).join("")}</div></div>` : ""}</div></div>
+    <div class="sec"><div class="sechead">課題名</div><div class="group"><div class="field"><input type="text" id="f-pattern" value="${esc(f.pattern)}" placeholder="例: 第{n}回 小テスト" aria-label="課題名"></div></div><div class="secfoot">{n} は回数(1, 2, 3 …)に置き換わります。</div></div>
+    <div class="sec"><div class="sechead">締め切り</div><div class="group">
+      <div class="field"><label for="f-weekday">曜日</label><select id="f-weekday">${WD.map((w, i) => `<option value="${i}" ${f.weekday === i ? "selected" : ""}>${w}曜日</option>`).join("")}</select></div>
+      <div class="field"><label for="f-time">時刻</label><input type="time" id="f-time" value="${pad(f.hour)}:${pad(f.minute)}"></div>
+      <div class="field"><label for="f-start">開始日</label><input type="date" id="f-start" value="${toDateInput(f.start)}"></div>
+      <div class="field"><div class="inline"><span>終了日を決める</span><label class="switch"><input type="checkbox" id="f-hasend" ${f.end != null ? "checked" : ""}><span></span></label></div></div>
+      ${f.end != null ? `<div class="field"><label for="f-end">終了日(学期末)</label><input type="date" id="f-end" value="${toDateInput(f.end)}"></div>` : ""}
+      <div class="field"><div class="inline"><span>有効</span><label class="switch"><input type="checkbox" id="f-active" ${f.active ? "checked" : ""}><span></span></label></div></div>
+    </div></div>
+    ${UI.sheet.id ? `<div class="sec"><button class="btn danger full" data-act="delete-template">この繰り返しを削除</button></div>` : ""}`);
+}
+function importSheet() {
+  const r = UI.importResult, count = r ? r.items.filter(i => i.selected).length : 0;
+  const tagOf = it => ({ new: ["new", "新規"], dup: ["dup", "登録済み"], dupself: ["dup", "このテキスト内で重複"], upd: ["upd", "登録済み・締め切りの時刻を更新"] }[it.match]);
+  return sheetFrame("取り込み", count > 0, `
+    <div class="sec"><div class="sechead">取り込むテキスト</div><div class="group">
+      <div class="field"><textarea id="f-import" placeholder="#kadai v1 で始まる文字を貼り付け" aria-label="取り込むテキスト">${esc(UI.importText)}</textarea></div>
+      <div class="btnrow"><button class="btn" data-act="import-sample">例を入れる</button><button class="btn primary" data-act="import-parse">読み取る</button></div>
+    </div><div class="secfoot">Mac の Claude in Chrome が出力した文字をコピーして、ここに貼り付けます。</div></div>
+    ${r && !r.header ? `<div class="sec err">「#kadai v1」の行が見つかりません。Claude の出力をそのまま貼り付けてください。</div>` : ""}
+    ${r && r.items.length ? `<div class="sec"><div class="sechead">登録する提出物(${count} 件)</div><div class="group">${r.items.map((it, i) => {
+      const [cls, label] = tagOf(it);
+      return `<div class="cell"><button class="check ${it.selected ? "on" : ""}" data-act="import-toggle" data-i="${i}" aria-label="登録する"><span>${it.selected ? "✓" : ""}</span></button>
+        <div class="rowmain"><span class="tag ${cls}">${label}</span><div class="subj">${esc(it.subject)}</div><div class="ttl">${esc(it.title)}</div>
+        <div class="due">${fmtDT(it.due)}${it.hasTime ? "" : `<span style="color:var(--orange)"> ・ 時刻不明 → 初期時刻</span>`}</div>${it.memo ? `<div class="due">${esc(it.memo)}</div>` : ""}</div></div>`;
+    }).join("")}</div></div>` : ""}
+    ${r && r.errors.length ? `<div class="sec"><div class="sechead">読み取れなかった行(登録しません)</div><div class="group">${r.errors.map(e => `<div class="field"><span class="err">${e.no} 行目: ${esc(e.reason)}</span><span class="code">${esc(e.raw)}</span></div>`).join("")}</div></div>` : ""}`,
+    `${count} 件を登録`);
+}
+function sheetFrame(title, canSave, body, saveLabel = "保存") {
+  return `<div class="sheet"><div class="sheetbody" role="dialog" aria-label="${esc(title)}"><div class="sheetnav"><button class="linkbtn" data-act="close-sheet" style="justify-self:start">キャンセル</button><h3>${esc(title)}</h3><button class="linkbtn" data-act="save-sheet" ${canSave ? "" : "disabled"}>${esc(saveLabel)}</button></div><div class="sheetscroll">${body}</div></div></div>`;
+}
+
+function renderPhone() {
+  const screen = document.getElementById("screen");
+  const scroll = screen.querySelector(".appbody")?.scrollTop ?? 0, sheetScroll = screen.querySelector(".sheetscroll")?.scrollTop ?? 0;
+  const view = UI.tab === "list" ? listView() : UI.tab === "subjects" ? subjectsView() : settingsView();
+  const sheet = !UI.sheet ? "" : UI.sheet.type === "task" ? taskSheet() : UI.sheet.type === "subject" ? subjectSheet() : UI.sheet.type === "template" ? templateSheet() : importSheet();
+  const b = UI.banner;
+  screen.innerHTML = `<div class="status"><span>${fmtTime(S.now)}</span><span>${new Date(S.now).getMonth() + 1}/${new Date(S.now).getDate()}(${WD[new Date(S.now).getDay()]})</span></div>
+    <div class="appbody">${view}</div>
+    <nav class="tabbar" role="tablist">${[["list", "☑", "提出物"], ["subjects", "▤", "科目・繰り返し"], ["settings", "⚙", "設定"]].map(([k, ic, l]) => `<button class="tab" role="tab" aria-selected="${UI.tab === k}" data-act="tab" data-tab="${k}"><span class="ico">${ic}</span>${l}</button>`).join("")}</nav>
+    ${sheet}
+    ${S.now >= expiry() ? `<div class="expired"><b style="font-size:17px">アプリの署名期限が切れました</b><span class="due">無料の Apple ID で入れたアプリは 7 日で開けなくなります。Mac の Xcode で ▶ を押して入れ直してください。データは消えていません。</span><button class="btn primary" data-act="reinstall">Mac から入れ直す</button></div>` : ""}
+    ${b ? `<div class="banner" data-act="dismiss-banner"><div class="appicon"><i></i></div><div><div class="t">${esc(b.title)}</div><div class="b">${esc(b.body)}</div></div></div>` : ""}`;
+  const ab = screen.querySelector(".appbody"); if (ab) ab.scrollTop = scroll;
+  const ss = screen.querySelector(".sheetscroll"); if (ss) ss.scrollTop = sheetScroll;
+}
+
+// ===== 右の操作パネル =====
+function renderSide() {
+  const pending = S.tasks.filter(t => !t.done).sort((a, b) => a.due - b.due), plans = plan(S.now);
+  const kindLabel = { task: ["k-task", "個別"], nightly: ["k-nightly", "まとめ"], expiry: ["k-expiry", "署名"] };
+  const item = p => `<div class="nitem"><time>${fmtDT(p.at)}</time><div><div class="t"><span class="kind ${kindLabel[p.kind][0]}">${kindLabel[p.kind][1]}</span>${esc(p.title)}</div><div class="b">${esc(p.body)}</div></div></div>`;
+  const next = plans.find(p => p.at > S.now);
+  document.getElementById("side").innerHTML = `
+  <section class="panel"><h2>時計(試作の中の時刻)</h2>
+    <div class="clock">${fmtDT(S.now)}</div>
+    <div class="controls">
+      <button class="btn" data-act="adv" data-ms="${HOUR}">+1 時間</button>
+      <button class="btn" data-act="adv" data-ms="${6 * HOUR}">+6 時間</button>
+      <button class="btn" data-act="adv" data-ms="${DAY}">+1 日</button>
+      <button class="btn primary" data-act="next" ${next ? "" : "disabled"}>次の通知まで進める</button>
+    </div>
+    <div class="note">${next ? `次の通知: ${fmtDT(next.at)}(${remaining(next.at, S.now).replace("あと ", "")}後)` : "予約中の通知はありません。"} 時計を進めると、アプリを開いたのと同じように繰り返し課題の追加と通知の予約し直しも行います。</div>
+    <div class="controls"><button class="btn danger" data-act="reset">サンプルに戻す</button></div>
+  </section>
+  <section class="panel"><h2>ホーム画面</h2>
+    <div class="home">
+      <div><div class="bigicon"><i></i>${S.settings.badge && pending.length ? `<span class="badge">${pending.length}</span>` : ""}</div><div class="iconlbl">課題通知</div></div>
+      <div class="widget">
+        <div class="inline"><b style="font-size:12px">提出物</b><span class="due" style="font-size:11px">未完了 ${pending.length} 件</span></div>
+        ${pending.length ? pending.slice(0, 3).map(t => `<div class="wrow"><i class="bar" style="background:${subj(t.subjectId)?.color ?? "#999"}"></i><div style="min-width:0"><div class="wt">${esc(t.title)}</div><div class="ws">${esc(subjName(t))} ・ ${relDay(t.due, S.now)}</div></div><b class="c-${groupOf(t.due, S.now)}" style="font-size:12px">${remaining(t.due, S.now)}</b></div>`).join("") : `<div class="due">提出物はありません</div>`}
+      </div>
+    </div>
+  </section>
+  <section class="panel"><h2>予約中の通知(iOS の上限 64 件)</h2>
+    <div class="meter" aria-hidden="true"><i style="width:${Math.min(100, plans.length / 64 * 100)}%"></i></div>
+    <div class="note">${plans.length} 件予約中。個別 ${plans.filter(p => p.kind === "task").length} ・ まとめ ${plans.filter(p => p.kind === "nightly").length} ・ 署名 ${plans.filter(p => p.kind === "expiry").length}</div>
+    <div class="list">${plans.length ? plans.map(item).join("") : `<div class="note" style="padding:8px 0">未完了の提出物がないので、通知は予約されていません。</div>`}</div>
+  </section>
+  <section class="panel"><h2>届いた通知(新しい順)</h2>
+    <div class="list">${S.delivered.length ? S.delivered.map(item).join("") : `<div class="note" style="padding:8px 0">まだありません。「次の通知まで進める」を押してみてください。</div>`}</div>
+  </section>`;
+}
+function render() { renderPhone(); renderSide(); }
+
+// ===== 操作 =====
+function openTask(id) {
+  const t = id && S.tasks.find(x => x.id === id);
+  const defDue = atTime(addDays(sod(S.now), 7), Math.floor(S.settings.defaultDueMin / 60), S.settings.defaultDueMin % 60);
+  UI.sheet = { type: "task", id: t?.id ?? null, form: { subject: t ? subjName(t) : "", title: t?.title ?? "", due: t?.due ?? defDue, memo: t?.memo ?? "", custom: !!t?.rules, rules: t?.rules ? t.rules.map(r => ({ ...r })) : [] } };
+}
+function formRulesTarget(path) { return path === "global" ? S.settings.globalRules : UI.sheet.form.rules; }
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act, id = el.dataset.id;
+  if (act === "toggle") { e.stopPropagation(); toggleDone(id); return; }
+  switch (act) {
+    case "tab": UI.tab = el.dataset.tab; break;
+    case "edit": openTask(id); break;
+    case "new-task": openTask(null); break;
+    case "toggle-done-list": UI.showDone = !UI.showDone; break;
+    case "close-sheet": UI.sheet = null; break;
+    case "pick-subject": UI.sheet.form.subject = el.dataset.name; break;
+    case "pick-color": UI.sheet.form.color = el.dataset.color; break;
+    case "rule-add": formRulesTarget(el.dataset.path).push(el.dataset.kind === "days" ? rule("days", 1) : rule("hours", 3)); if (el.dataset.path === "global") return refresh(); break;
+    case "rule-del": formRulesTarget(el.dataset.path).splice(+el.dataset.i, 1); if (el.dataset.path === "global") return refresh(); break;
+    case "new-subject": UI.sheet = { type: "subject", id: null, form: { name: "", color: PALETTE[5][0], custom: false, rules: [] } }; break;
+    case "edit-subject": { const s = subj(id); UI.sheet = { type: "subject", id, form: { name: s.name, color: s.color, custom: !!s.rules, rules: s.rules ? s.rules.map(r => ({ ...r })) : [] } }; break; }
+    case "new-template": UI.sheet = { type: "template", id: null, form: { subject: "", pattern: "第{n}回 ", weekday: 4, hour: 17, minute: 0, start: sod(S.now), end: null, active: true } }; break;
+    case "edit-template": { const tp = S.templates.find(x => x.id === id); UI.sheet = { type: "template", id, form: { subject: subj(tp.subjectId)?.name ?? "", pattern: tp.pattern, weekday: tp.weekday, hour: tp.hour, minute: tp.minute, start: tp.start, end: tp.end, active: tp.active } }; break; }
+    case "open-import": UI.sheet = { type: "import" }; UI.importResult = null; break;
+    case "import-sample": UI.importText = sampleImportText(); UI.importResult = parseImport(UI.importText); break;
+    case "import-parse": UI.importResult = parseImport(UI.importText); break;
+    case "import-toggle": { const it = UI.importResult.items[+el.dataset.i]; it.selected = !it.selected; break; }
+    case "save-sheet": if (el.disabled) return; saveSheet(); return;
+    case "delete-task": S.tasks = S.tasks.filter(t => t.id !== UI.sheet.id); S.delivered = S.delivered.filter(p => p.taskId !== UI.sheet.id); UI.sheet = null; return refresh();
+    case "delete-subject": {
+      const sid = UI.sheet.id;
+      if (S.tasks.some(t => t.subjectId === sid) || S.templates.some(t => t.subjectId === sid)) { UI.sheet.error = "この科目の提出物(完了済みも含む)や繰り返しが残っています。先に削除してください。"; break; }
+      S.subjects = S.subjects.filter(s => s.id !== sid); UI.sheet = null; return refresh();
+    }
+    case "delete-template": S.templates = S.templates.filter(t => t.id !== UI.sheet.id); S.tasks.forEach(t => { if (t.templateId === UI.sheet.id) t.templateId = null; }); UI.sheet = null; return refresh();
+    case "copy-prompt": {
+      const done = () => { el.textContent = "コピーしました"; };
+      try { navigator.clipboard.writeText(CLAUDE_PROMPT).then(done, () => { el.textContent = "コピーできませんでした"; }); } catch (err) { el.textContent = "コピーできませんでした"; }
+      return;
+    }
+    case "reinstall": S.installAt = S.now; return refresh();
+    case "dismiss-banner": UI.banner = null; break;
+    case "adv": return advanceTo(S.now + Number(el.dataset.ms));
+    case "next": { const n = plan(S.now).find(p => p.at > S.now); if (n) advanceTo(n.at); return; }
+    case "reset": S = sampleState(); UI.sheet = null; UI.banner = null; return refresh();
+  }
+  render();
+});
+
+document.addEventListener("input", e => {
+  const el = e.target;
+  if (el.id === "f-import") { UI.importText = el.value; return; }
+  const f = UI.sheet?.form;
+  if (f) {
+    if (el.id === "f-subject") { f.subject = el.value; updateSaveButton(); return; }
+    if (el.id === "f-title") { f.title = el.value; updateSaveButton(); return; }
+    if (el.id === "f-memo") { f.memo = el.value; return; }
+    if (el.id === "f-name") { f.name = el.value; updateSaveButton(); return; }
+    if (el.id === "f-pattern") { f.pattern = el.value; updateSaveButton(); return; }
+  }
+});
+function updateSaveButton() {
+  const f = UI.sheet.form, btn = document.querySelector('[data-act="save-sheet"]'); if (!btn) return;
+  const ok = UI.sheet.type === "task" ? f.title.trim() && f.subject.trim() : UI.sheet.type === "subject" ? f.name.trim() : f.subject.trim() && f.pattern.trim();
+  btn.disabled = !ok;
+}
+document.addEventListener("change", e => {
+  const el = e.target, f = UI.sheet?.form;
+  if (el.dataset.rule) {
+    const r = formRulesTarget(el.dataset.rule)[+el.dataset.i], k = el.dataset.k;
+    if (k === "kind") { r.kind = el.value; if (r.kind === "hours" && r.amount < 1) r.amount = 3; }
+    if (k === "amount") r.amount = Math.max(r.kind === "days" ? 0 : 1, Math.min(r.kind === "days" ? 30 : 72, parseInt(el.value, 10) || 0));
+    if (k === "time" && el.value) { r.hour = +el.value.slice(0, 2); r.minute = +el.value.slice(3, 5); }
+    return el.dataset.rule === "global" ? refresh() : render();
+  }
+  switch (el.id) {
+    case "set-nightly": S.settings.nightly = el.checked; return refresh();
+    case "set-nightly-time": if (el.value) S.settings.nightlyMin = inputToMin(el.value); return refresh();
+    case "set-badge": S.settings.badge = el.checked; return refresh();
+    case "set-default": if (el.value) S.settings.defaultDueMin = inputToMin(el.value); return refresh();
+    case "f-due": if (el.value) f.due = new Date(el.value).getTime(); return;
+    case "f-custom":
+      f.custom = el.checked;
+      if (f.custom && !f.rules.length) {
+        const base = UI.sheet.type === "task" ? (S.subjects.find(s => s.name === f.subject.trim())?.rules ?? S.settings.globalRules) : S.settings.globalRules;
+        f.rules = base.map(r => ({ ...r, id: uid() }));
+      }
+      return render();
+    case "f-weekday": f.weekday = +el.value; return;
+    case "f-time": if (el.value) { f.hour = +el.value.slice(0, 2); f.minute = +el.value.slice(3, 5); } return;
+    case "f-start": if (el.value) f.start = new Date(el.value + "T00:00").getTime(); return;
+    case "f-hasend": f.end = el.checked ? addDays(S.now, 90) : null; return render();
+    case "f-end": if (el.value) f.end = new Date(el.value + "T00:00").getTime(); return;
+    case "f-active": f.active = el.checked; return;
+  }
+});
+
+function saveSheet() {
+  const sh = UI.sheet, f = sh.form;
+  if (sh.type === "task") {
+    const s = findOrCreateSubject(f.subject);
+    let t = sh.id && S.tasks.find(x => x.id === sh.id);
+    if (!t) { t = { id: uid(), done: false, completedAt: null, templateId: null }; S.tasks.push(t); }
+    Object.assign(t, { subjectId: s?.id ?? null, title: f.title.trim(), due: f.due, memo: f.memo, rules: f.custom ? f.rules : null });
+  } else if (sh.type === "subject") {
+    const name = f.name.trim();
+    if (S.subjects.some(s => s.name === name && s.id !== sh.id)) { sh.error = `「${name}」という科目はすでにあります。`; return render(); }
+    let s = sh.id && subj(sh.id);
+    if (!s) { s = { id: uid() }; S.subjects.push(s); }
+    Object.assign(s, { name, color: f.color, rules: f.custom ? f.rules : null });
+  } else if (sh.type === "template") {
+    const s = findOrCreateSubject(f.subject);
+    let tp = sh.id && S.templates.find(x => x.id === sh.id);
+    const pattern = f.pattern.trim();
+    if (tp) {
+      const changed = tp.weekday !== f.weekday || tp.hour !== f.hour || tp.minute !== f.minute || tp.start !== f.start || tp.end !== f.end || tp.pattern !== pattern;
+      if (changed) { S.tasks = S.tasks.filter(t => !(t.templateId === tp.id && !t.done && t.due > S.now)); tp.lastGen = null; }
+    } else { tp = { id: uid(), lastGen: null }; S.templates.push(tp); }
+    Object.assign(tp, { subjectId: s?.id ?? null, pattern, weekday: f.weekday, hour: f.hour, minute: f.minute, start: f.start, end: f.end, active: f.active });
+  } else if (sh.type === "import") {
+    for (const it of UI.importResult.items.filter(i => i.selected)) {
+      const target = it.match === "upd" && S.tasks.find(t => t.id === it.existingId);
+      if (target) { target.due = it.due; if (it.memo) target.memo = it.memo; continue; }
+      const s = findOrCreateSubject(it.subject);
+      S.tasks.push({ id: uid(), subjectId: s.id, title: it.title, due: it.due, memo: it.memo, done: false, completedAt: null, rules: null, templateId: null });
+    }
+    UI.importResult = null; UI.importText = "";
+  }
+  UI.sheet = null;
+  refresh();
+}
+
+S = load();
+refresh();
+</script>

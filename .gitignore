@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Xcode(個人ごとの設定やビルドの途中経過)
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Swift Package
+.build/
+.swiftpm/
+Package.resolved
