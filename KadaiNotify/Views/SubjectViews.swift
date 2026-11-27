@@ -162,7 +162,7 @@ struct SubjectEditView: View {
                     Section {
                         Button("この科目を削除", role: .destructive) { confirmingDelete = true }
                     } footer: {
-                        Text("提出物や繰り返しが残っている科目は削除できません。")
+                        Text("提出物・繰り返し・テストが残っている科目は削除できません。")
                     }
                 }
             }
@@ -219,9 +219,9 @@ struct SubjectEditView: View {
 
     private func deleteSubject() {
         guard let subject else { return }
-        if !(subject.assignments ?? []).isEmpty || !(subject.templates ?? []).isEmpty {
+        if !(subject.assignments ?? []).isEmpty || !(subject.templates ?? []).isEmpty || !(subject.exams ?? []).isEmpty {
             messageTitle = "削除できません"
-            message = "この科目の提出物(完了済みも含む)や繰り返しが残っています。先に削除するか、別の科目に変えてください。"
+            message = "この科目の提出物(完了済みも含む)・繰り返し・テストが残っています。先に削除するか、別の科目に変えてください。"
             return
         }
         context.delete(subject)

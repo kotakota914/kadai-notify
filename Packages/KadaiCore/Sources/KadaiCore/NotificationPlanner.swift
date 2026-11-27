@@ -39,6 +39,10 @@ public struct PlannerSettings: Hashable, Sendable {
     public var maxIndividual: Int = 49
     /// ほかの用途(「1 時間後にもう一度」の再通知など)のために空けておく件数。個別の枠から引く
     public var reservedSlots: Int = 0
+    /// テストの通知を出すか
+    public var examEnabled: Bool = false
+    /// テストの何日前に知らせるか(夜のまとめ通知と同じ時刻に鳴らす)
+    public var examDaysBefore: [Int] = [7, 3, 1]
     /// まとめ通知の本文に並べる課題の最大数
     public var maxSummaryLines: Int = 4
 
@@ -54,6 +58,8 @@ public struct PlannedNotification: Hashable, Sendable {
         case nightly
         /// 朝のまとめ通知
         case morning
+        /// テストの何日前かのお知らせ
+        case exam(examID: String)
         case signingExpiry
     }
 
@@ -70,9 +76,11 @@ public enum NotificationPlanner {
     public static let individualPrefix = "task-"
     public static let nightlyPrefix = "nightly-"
     public static let morningPrefix = "morning-"
+    public static let examPrefix = "exam-"
     public static let signingExpiryID = "signing-expiry"
 
     public static func plan(tasks: [TaskSnapshot],
+                            exams: [ExamSnapshot] = [],
                             settings: PlannerSettings,
                             signingExpiry: Date?,
                             now: Date,
@@ -115,7 +123,7 @@ public enum NotificationPlanner {
 
         // 個別通知の枠。朝のまとめと、空けておく件数の分だけ減らす(合計が 64 件を超えないように)
         let individualLimit = max(0, settings.maxIndividual - morningPlans.count - settings.reservedSlots)
-        var result: [PlannedNotification] = individual.prefix(individualLimit).map { item in
+        let individualPlans: [PlannedNotification] = individual.map { item in
             let deadline = "締め切り \(DeadlineText.dateTime(item.task.due, calendar: calendar))(\(DeadlineText.remaining(until: item.task.due, now: item.fire)))"
             if item.isStart {
                 return PlannedNotification(
@@ -132,6 +140,11 @@ public enum NotificationPlanner {
                 body: deadline,
                 kind: .individual(taskID: item.task.id))
         }
+        // テストの通知も同じ枠を使う。提出物の通知と合わせて、鳴る時刻が近い順に枠の数だけ予約する
+        let examPlans = settings.examEnabled
+            ? examReminders(exams: exams, settings: settings, now: now, calendar: calendar)
+            : []
+        var result = Array((individualPlans + examPlans).sorted { $0.fireDate < $1.fireDate }.prefix(individualLimit))
         result.append(contentsOf: morningPlans)
 
         // 3. 署名の期限切れのお知らせ(期限の前日、まとめ通知と同じ時刻)
@@ -220,6 +233,30 @@ public enum NotificationPlanner {
             offset += 1
         }
         return times
+    }
+
+    /// テストの通知。テストの N 日前(初期値は 7 日前・3 日前・前日)の、夜のまとめ通知と同じ時刻に鳴らす。
+    /// すでに過ぎた時刻のものは作らない
+    static func examReminders(exams: [ExamSnapshot], settings: PlannerSettings,
+                              now: Date, calendar: Calendar) -> [PlannedNotification] {
+        var result: [PlannedNotification] = []
+        for exam in exams where exam.date > now {
+            for days in Set(settings.examDaysBefore).sorted(by: >) where days >= 0 {
+                guard let day = calendar.date(byAdding: .day, value: -days, to: calendar.startOfDay(for: exam.date)),
+                      let fire = calendar.date(bySettingHour: settings.nightlyHour, minute: settings.nightlyMinute,
+                                               second: 0, of: day),
+                      fire > now, fire < exam.date else { continue }
+                let name = exam.subject.isEmpty ? exam.title : "【\(exam.subject)】\(exam.title)"
+                let left = ExamCountdown.text(until: exam.date, now: fire, calendar: calendar)
+                result.append(PlannedNotification(
+                    identifier: "\(examPrefix)\(exam.id)-\(minuteKey(fire))",
+                    fireDate: fire,
+                    title: name,
+                    body: "テストは \(DeadlineText.dateTime(exam.date, calendar: calendar)) です(\(left))",
+                    kind: .exam(examID: exam.id)))
+            }
+        }
+        return result
     }
 
     /// 朝のまとめ通知。その日か翌日が締め切りの提出物がある朝だけ作る。

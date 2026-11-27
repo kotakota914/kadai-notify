@@ -31,7 +31,12 @@ enum Refresher {
         let snoozes = SnoozeStore.active(now: now, pendingIDs: Set(pending.map(\.key)))
         var plannerSettings = settings.plannerSettings
         plannerSettings.reservedSlots = snoozes.count
+        // これから来るテスト(終わったテストは通知しない)
+        let exams = ((try? context.fetch(FetchDescriptor<Exam>(sortBy: [SortDescriptor(\.date)]))) ?? [])
+            .filter { $0.date > now }
+            .map { ExamSnapshot(id: $0.key, subject: $0.subject?.name ?? "", title: $0.title, date: $0.date) }
         let plans = NotificationPlanner.plan(tasks: snapshots,
+                                             exams: exams,
                                              settings: plannerSettings,
                                              signingExpiry: SigningInfo.expirationDate,
                                              now: now,

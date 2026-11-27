@@ -46,6 +46,12 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("テストの通知", isOn: $settings.examEnabled)
+                } footer: {
+                    Text("「テスト」タブに登録したテストの 7 日前・3 日前・前日に知らせます。時刻は毎晩のまとめ通知と同じです。")
+                }
+
+                Section {
                     Toggle("アイコンに未完了の件数を出す", isOn: $settings.badgeEnabled)
                     DatePicker("時刻がわからない締め切り", selection: timeBinding(minutesOfDay: $settings.defaultDueMinutes),
                                displayedComponents: .hourAndMinute)

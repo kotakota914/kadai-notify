@@ -21,8 +21,8 @@
   - 実在の課題データは `build/`(Git 管理対象外)にだけ置く。
 
 ## 構成
-- `Packages/KadaiCore/` … 通知の計算(`NotificationPlanner`)、取り込みの読み取り(`ImportParser`)、繰り返し(`RecurrenceGenerator`)、表示の文字(`DeadlineText`)、種類の推測(`AssignmentKind`)、カレンダーとガントの計算(`MonthGrid` / `GanttLayout`)
+- `Packages/KadaiCore/` … 通知の計算(`NotificationPlanner`)、取り込みの読み取り(`ImportParser`)、繰り返し(`RecurrenceGenerator`)、表示の文字(`DeadlineText`)、種類の推測(`AssignmentKind`)、テストまでの残り日数(`ExamCountdown`)、カレンダーとガントの計算(`MonthGrid` / `GanttLayout`)
 - `Shared/` … SwiftData のモデル。アプリとウィジェットの両方でコンパイルされる
-- `KadaiNotify/` … アプリ本体。下のタブは 提出物 / カレンダー / ガント / 科目・繰り返し の 4 つ(設定は提出物の右上の歯車から開く)。データが変わったら必ず `Refresher.refresh(context)` を呼ぶ(通知の予約し直し・バッジ・ウィジェット更新)
-- `KadaiNotifyWidget/` … ウィジェット
+- `KadaiNotify/` … アプリ本体。下のタブは 提出物 / カレンダー / ガント / テスト / 科目・繰り返し の 5 つ(設定は提出物の右上の歯車から開く)。データが変わったら必ず `Refresher.refresh(context)` を呼ぶ(通知の予約し直し・バッジ・ウィジェット更新)
+- `KadaiNotifyWidget/` … ウィジェット(「次の締め切り」と「テストまでの日数」)
 - `KadaiNotify.xcodeproj` … フォルダ同期型(objectVersion 77)。ファイルを足すだけでターゲットに入る

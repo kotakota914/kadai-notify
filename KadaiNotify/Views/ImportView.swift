@@ -24,12 +24,14 @@ struct ImportView: View {
     @State private var knownSubjectCount = 0
     /// 「#grading 科目名 | 評価方法」の行で指定された、科目の評価方法(配点)
     @State private var gradings: [ImportGrading] = []
+    /// 「#exam 科目 | テスト名 | 日時」の行で指定されたテストのうち、まだ登録されていないもの
+    @State private var newExams: [ImportExam] = []
     @State private var parsed = false
     @State private var headerMissing = false
 
     private var selectedCount: Int { candidates.filter(\.selected).count }
-    /// 提出物のほかに、登録する科目や評価方法があるか
-    private var hasExtras: Bool { !newSubjects.isEmpty || !gradings.isEmpty }
+    /// 提出物のほかに、登録する科目・評価方法・テストがあるか
+    private var hasExtras: Bool { !newSubjects.isEmpty || !gradings.isEmpty || !newExams.isEmpty }
 
     /// - Parameter initialText: 最初から入れておくテキスト。Mac から送られてきたファイルの中身を渡すと、
     ///   画面を開いた時点で読み取りまで済ませる。何も渡さなければ空の画面から始まる。
@@ -97,6 +99,24 @@ struct ImportView: View {
                         }
                     }
 
+                    if !newExams.isEmpty {
+                        Section {
+                            ForEach(newExams, id: \.self) { exam in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(exam.subject).font(.caption)
+                                    Text(exam.title).font(.headline)
+                                    Text(DeadlineText.dateTime(exam.date, calendar: .current))
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } header: {
+                            Text("追加するテスト(\(newExams.count) 件)")
+                        } footer: {
+                            Text("「テスト」タブに並び、残り日数を数えます。")
+                        }
+                    }
+
                     if !gradings.isEmpty {
                         Section {
                             ForEach(gradings, id: \.self) { grading in
@@ -129,7 +149,7 @@ struct ImportView: View {
                     }
 
                     if !headerMissing && candidates.isEmpty && errors.isEmpty
-                        && newSubjects.isEmpty && knownSubjectCount == 0 && gradings.isEmpty {
+                        && newSubjects.isEmpty && knownSubjectCount == 0 && gradings.isEmpty && newExams.isEmpty {
                         Section { Text("提出物の行がありませんでした。") }
                     }
                 }
@@ -178,6 +198,16 @@ struct ImportView: View {
         newSubjects = result.subjects.filter { !knownKeys.contains(ImportMatcher.key($0)) }
         knownSubjectCount = result.subjects.count - newSubjects.count
         gradings = result.gradings
+
+        // テストは「科目+テスト名+日付」が同じものがすでにあれば足さない
+        let knownExams = (try? context.fetch(FetchDescriptor<Exam>())) ?? []
+        newExams = result.exams.filter { exam in
+            !knownExams.contains {
+                ImportMatcher.key($0.subject?.name ?? "") == ImportMatcher.key(exam.subject)
+                    && ImportMatcher.key($0.title) == ImportMatcher.key(exam.title)
+                    && calendar.isDate($0.date, inSameDayAs: exam.date)
+            }
+        }
         parsed = true
     }
 
@@ -189,6 +219,12 @@ struct ImportView: View {
         // 科目の評価方法(配点)を書き込む(科目がなければ作る)
         for grading in gradings {
             SubjectService.findOrCreate(name: grading.subject, in: context)?.gradingNote = grading.note
+        }
+        // テストを登録する
+        for item in newExams {
+            let exam = Exam(title: item.title, date: item.date, memo: item.memo)
+            context.insert(exam)
+            exam.subject = SubjectService.findOrCreate(name: item.subject, in: context)
         }
         let existing = (try? context.fetch(FetchDescriptor<Assignment>())) ?? []
         for candidate in candidates where candidate.selected {

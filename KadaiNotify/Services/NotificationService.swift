@@ -91,6 +91,7 @@ enum NotificationService {
                 content.userInfo = [taskIDKey: taskID]
             case .nightly: content.threadIdentifier = "nightly"
             case .morning: content.threadIdentifier = "morning"
+            case .exam(let examID): content.threadIdentifier = "exam-\(examID)"
             case .signingExpiry: content.threadIdentifier = "signing"
             }
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: plan.fireDate)

@@ -44,6 +44,8 @@ public struct ImportResult: Sendable {
     public var subjects: [String] = []
     /// 「#grading 科目名 | 評価方法」の行。同じ科目が 2 回出てきたら後のものを使う
     public var gradings: [ImportGrading] = []
+    /// 「#exam 科目 | テスト名 | 日時 | メモ」の行で指定されたテスト
+    public var exams: [ImportExam] = []
     public var errors: [ImportError]
     /// 「#kadai v1」の行が見つかったか
     public var headerFound: Bool
@@ -89,6 +91,7 @@ public enum ImportParser {
         var items: [ImportItem] = []
         var subjects: [String] = []
         var gradings: [ImportGrading] = []
+        var exams: [ImportExam] = []
         var errors: [ImportError] = []
 
         for index in (headerIndex + 1)..<lines.count {
@@ -100,6 +103,22 @@ public enum ImportParser {
             if let name = subjectName(fromDirective: line) {
                 if !name.isEmpty, !subjects.contains(where: { ImportMatcher.key($0) == ImportMatcher.key(name) }) {
                     subjects.append(name)
+                }
+                continue
+            }
+
+            // 「#exam 科目 | テスト名 | 日時 | メモ」の行: テストを登録する
+            if line.lowercased().hasPrefix("#exam ") || line.hasPrefix("#テスト ") {
+                let body = line.drop(while: { $0 != " " }).trimmingCharacters(in: .whitespaces)
+                let parts = body.split(separator: "|", omittingEmptySubsequences: false)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                if parts.count >= 3, !parts[0].isEmpty, !parts[1].isEmpty,
+                   let parsed = parseDate(parts[2], defaultHour: defaultHour, defaultMinute: defaultMinute, calendar: calendar) {
+                    let memo = parts.dropFirst(3).filter { !$0.isEmpty }.joined(separator: " ")
+                    exams.append(ImportExam(subject: parts[0], title: parts[1], date: parsed.0, hasTime: parsed.1, memo: memo))
+                } else {
+                    errors.append(ImportError(lineNumber: lineNumber, line: raw,
+                                              reason: "テストは「#exam 科目 | テスト名 | 日時」の形で書きます"))
                 }
                 continue
             }
@@ -153,7 +172,7 @@ public enum ImportParser {
             items.append(ImportItem(subject: subject, title: title, due: due, hasTime: hasTime,
                                     memo: memo, lineNumber: lineNumber))
         }
-        return ImportResult(items: items, subjects: subjects, gradings: gradings, errors: errors, headerFound: true)
+        return ImportResult(items: items, subjects: subjects, gradings: gradings, exams: exams, errors: errors, headerFound: true)
     }
 
     /// 「#subject 線形代数学」「#科目 線形代数学」の行なら科目名を返す。それ以外の行は nil。

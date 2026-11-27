@@ -25,6 +25,9 @@ final class Subject {
     @Relationship(deleteRule: .nullify, inverse: \RecurringTemplate.subject)
     var templates: [RecurringTemplate]? = []
 
+    @Relationship(deleteRule: .nullify, inverse: \Exam.subject)
+    var exams: [Exam]? = []
+
     init(name: String, colorHex: String) {
         self.name = name
         self.colorHex = colorHex
@@ -99,6 +102,29 @@ final class Assignment {
     var rank: AssignmentRank? {
         get { rankRaw.flatMap(AssignmentRank.init(rawValue:)) }
         set { rankRaw = newValue?.rawValue }
+    }
+
+    /// 通知の識別に使う文字列
+    var key: String { uid.uuidString }
+}
+
+/// テスト(試験)1 件。提出物とは別に持ち、「あと何日」を数える
+@Model
+final class Exam {
+    var uid: UUID = UUID()
+    var title: String = ""
+    /// テストの日時
+    var date: Date = Date()
+    /// 範囲や持ち込みなどのメモ
+    var memo: String = ""
+    var createdAt: Date = Date()
+
+    var subject: Subject?
+
+    init(title: String, date: Date, memo: String = "") {
+        self.title = title
+        self.date = date
+        self.memo = memo
     }
 
     /// 通知の識別に使う文字列

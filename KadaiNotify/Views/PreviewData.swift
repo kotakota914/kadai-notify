@@ -32,6 +32,19 @@ enum PreviewData {
             (info, "第8回レポート", 3 * 86400, false),
             (logic, "演習課題4", -2 * 86400, true),
         ]
+        // テストのサンプル(「テスト」タブとウィジェットの確認用)
+        let calendar = Calendar.current
+        let exams: [(Subject, String, Int, String)] = [
+            (logic, "小テスト 3", 2, "範囲は 7〜9 回"),
+            (info, "期末試験", 12, "持ち込み不可"),
+        ]
+        for (subject, title, days, memo) in exams {
+            let day = calendar.date(byAdding: .day, value: days, to: calendar.startOfDay(for: now)) ?? now
+            let exam = Exam(title: title, date: calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day) ?? day, memo: memo)
+            context.insert(exam)
+            exam.subject = subject
+        }
+
         for (subject, title, offset, done) in samples {
             let assignment = Assignment(title: title, dueDate: now.addingTimeInterval(offset))
             context.insert(assignment)

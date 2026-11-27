@@ -50,3 +50,15 @@ struct RankBadge: View {
             .accessibilityLabel("ランク \(rank.label)")
     }
 }
+
+/// テストの残り日数の色(近いほど目立つ色にする)
+enum ExamStyle {
+    static func color(daysLeft: Int) -> Color {
+        switch daysLeft {
+        case ...1: return .red
+        case 2...3: return .orange
+        case 4...7: return .accentColor
+        default: return .primary
+        }
+    }
+}

@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 }
 
-/// 下のタブで 4 つの画面(提出物・カレンダー・ガント・科目)を切り替える
+/// 下のタブで 5 つの画面(提出物・カレンダー・ガント・テスト・科目)を切り替える
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
@@ -121,6 +121,8 @@ struct RootView: View {
                 .tabItem { Label("カレンダー", systemImage: "calendar") }
             GanttTabView()
                 .tabItem { Label("ガント", systemImage: "chart.bar.xaxis") }
+            ExamListView()
+                .tabItem { Label("テスト", systemImage: "graduationcap") }
             SubjectListView()
                 .tabItem { Label("科目・繰り返し", systemImage: "books.vertical") }
             // 設定はタブに置かず、「提出物」の右上の歯車ボタンから開く

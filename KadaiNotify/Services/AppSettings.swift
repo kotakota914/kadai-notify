@@ -13,6 +13,8 @@ struct AppSettings: Equatable {
     var morningEnabled: Bool = true
     /// 朝のまとめ通知の時刻(0:00 からの分。7:30 = 450)
     var morningMinutes: Int = 7 * 60 + 30
+    /// テストの通知(7 日前・3 日前・前日の夜)
+    var examEnabled: Bool = true
     /// アイコンのバッジ
     var badgeEnabled: Bool = true
     /// 時刻がわからない締め切りの時刻(8:50 = 530)
@@ -24,6 +26,7 @@ struct AppSettings: Equatable {
         static let nightlyMinutes = "nightlyMinutes"
         static let morningEnabled = "morningEnabled"
         static let morningMinutes = "morningMinutes"
+        static let examEnabled = "examEnabled"
         static let badgeEnabled = "badgeEnabled"
         static let defaultDueMinutes = "defaultDueMinutes"
     }
@@ -45,6 +48,9 @@ struct AppSettings: Equatable {
         if defaults.object(forKey: Key.morningMinutes) != nil {
             settings.morningMinutes = defaults.integer(forKey: Key.morningMinutes)
         }
+        if defaults.object(forKey: Key.examEnabled) != nil {
+            settings.examEnabled = defaults.bool(forKey: Key.examEnabled)
+        }
         if defaults.object(forKey: Key.badgeEnabled) != nil {
             settings.badgeEnabled = defaults.bool(forKey: Key.badgeEnabled)
         }
@@ -60,6 +66,7 @@ struct AppSettings: Equatable {
         defaults.set(nightlyMinutes, forKey: Key.nightlyMinutes)
         defaults.set(morningEnabled, forKey: Key.morningEnabled)
         defaults.set(morningMinutes, forKey: Key.morningMinutes)
+        defaults.set(examEnabled, forKey: Key.examEnabled)
         defaults.set(badgeEnabled, forKey: Key.badgeEnabled)
         defaults.set(defaultDueMinutes, forKey: Key.defaultDueMinutes)
     }
@@ -73,6 +80,7 @@ struct AppSettings: Equatable {
         settings.morningEnabled = morningEnabled
         settings.morningHour = morningMinutes / 60
         settings.morningMinute = morningMinutes % 60
+        settings.examEnabled = examEnabled
         return settings
     }
 

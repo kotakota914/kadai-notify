@@ -14,7 +14,7 @@ enum AppGroup {
 
 /// SwiftData のデータベースを開く
 enum SharedStore {
-    static let schema = Schema([Assignment.self, Subject.self, RecurringTemplate.self])
+    static let schema = Schema([Assignment.self, Subject.self, RecurringTemplate.self, Exam.self])
 
     /// データベースを開く。開けなければ nil
     static func makeContainer(inMemory: Bool = false) -> ModelContainer? {
