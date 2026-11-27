@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import SwiftData
 import WidgetKit
 import KadaiCore
@@ -23,14 +24,19 @@ enum Refresher {
                          due: assignment.dueDate,
                          rules: ReminderRule.resolve(task: assignment.reminderRules,
                                                      subject: assignment.subject?.reminderRules,
-                                                     global: settings.globalRules))
+                                                     global: settings.globalRules),
+                         start: assignment.startDate)
         }
+        // 「1 時間後にもう一度」で予約した再通知のうち、まだ鳴っていないもの。その件数分だけ通知の枠を空ける
+        let snoozes = SnoozeStore.active(now: now, pendingIDs: Set(pending.map(\.key)))
+        var plannerSettings = settings.plannerSettings
+        plannerSettings.reservedSlots = snoozes.count
         let plans = NotificationPlanner.plan(tasks: snapshots,
-                                             settings: settings.plannerSettings,
+                                             settings: plannerSettings,
                                              signingExpiry: SigningInfo.expirationDate,
                                              now: now,
                                              calendar: calendar)
-        NotificationService.reschedule(plans, calendar: calendar)
+        NotificationService.reschedule(plans, snoozes: snoozes, now: now, calendar: calendar)
         NotificationService.setBadge(settings.badgeEnabled ? pending.count : 0)
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -77,6 +83,23 @@ enum SubjectService {
         let subject = Subject(name: trimmed, colorHex: SubjectPalette.nextColor(used: all.map(\.colorHex)))
         context.insert(subject)
         return subject
+    }
+}
+
+/// 提出物に対する操作のうち、複数の画面(一覧・カレンダー)から使うもの
+@MainActor
+enum AssignmentActions {
+    /// 完了 ⇔ 未完了を切り替え、通知・バッジ・ウィジェットを更新する
+    static func toggleDone(_ assignment: Assignment, in context: ModelContext) {
+        withAnimation {
+            assignment.isDone.toggle()
+            assignment.completedAt = assignment.isDone ? .now : nil
+        }
+        if assignment.isDone {
+            NotificationService.removeDelivered(forTaskKey: assignment.key)
+        }
+        try? context.save()
+        Refresher.refresh(context)
     }
 }
 

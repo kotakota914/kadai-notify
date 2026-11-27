@@ -8,13 +8,16 @@ public struct TaskSnapshot: Hashable, Sendable {
     public var due: Date
     /// この課題に使う通知ルール(課題 > 科目 > 全体 で決めたあとのもの)
     public var rules: [ReminderRule]
+    /// 着手日(取りかかり始める予定の日時)。決めていなければ nil
+    public var start: Date?
 
-    public init(id: String, subject: String, title: String, due: Date, rules: [ReminderRule]) {
+    public init(id: String, subject: String, title: String, due: Date, rules: [ReminderRule], start: Date? = nil) {
         self.id = id
         self.subject = subject
         self.title = title
         self.due = due
         self.rules = rules
+        self.start = start
     }
 }
 
@@ -25,8 +28,17 @@ public struct PlannerSettings: Hashable, Sendable {
     public var nightlyMinute: Int = 0
     /// まとめ通知を何晩先まで予約するか
     public var nightsAhead: Int = 14
-    /// 個別通知を最大何件予約するか(iOS の上限 64 件 = まとめ 14 + 個別 49 + 署名期限 1)
+    /// 朝のまとめ通知(「今日締め切り ○ 件・明日 ○ 件」)を出すか
+    public var morningEnabled: Bool = false
+    public var morningHour: Int = 7
+    public var morningMinute: Int = 30
+    /// 朝のまとめ通知を何日先まで予約するか
+    public var morningsAhead: Int = 7
+    /// 個別通知(締め切り前の通知と着手日の通知)を最大何件予約するか。
+    /// iOS の上限 64 件 = 夜のまとめ 14 + 個別 49 + 署名期限 1。朝のまとめを出す分だけ、個別の枠を減らす
     public var maxIndividual: Int = 49
+    /// ほかの用途(「1 時間後にもう一度」の再通知など)のために空けておく件数。個別の枠から引く
+    public var reservedSlots: Int = 0
     /// まとめ通知の本文に並べる課題の最大数
     public var maxSummaryLines: Int = 4
 
@@ -37,7 +49,11 @@ public struct PlannerSettings: Hashable, Sendable {
 public struct PlannedNotification: Hashable, Sendable {
     public enum Kind: Hashable, Sendable {
         case individual(taskID: String)
+        /// 着手日の通知
+        case start(taskID: String)
         case nightly
+        /// 朝のまとめ通知
+        case morning
         case signingExpiry
     }
 
@@ -53,6 +69,7 @@ public struct PlannedNotification: Hashable, Sendable {
 public enum NotificationPlanner {
     public static let individualPrefix = "task-"
     public static let nightlyPrefix = "nightly-"
+    public static let morningPrefix = "morning-"
     public static let signingExpiryID = "signing-expiry"
 
     public static func plan(tasks: [TaskSnapshot],
@@ -69,7 +86,7 @@ public enum NotificationPlanner {
         let nightKeys = Set(nights.map(minuteKey))
 
         // 2. 個別通知の候補。まとめ通知と同じ分(minute)に鳴るものは、まとめ通知に含める
-        var individual: [(task: TaskSnapshot, fire: Date)] = []
+        var individual: [(task: TaskSnapshot, fire: Date, isStart: Bool)] = []
         var folded: [Int: Set<String>] = [:]   // まとめ通知の時刻 → 含める課題 ID
         for task in sortedTasks {
             var usedKeys = Set<Int>()
@@ -81,20 +98,41 @@ public enum NotificationPlanner {
                 if nightKeys.contains(key) {
                     folded[key, default: []].insert(task.id)
                 } else {
-                    individual.append((task, fire))
+                    individual.append((task, fire, false))
                 }
+            }
+            // 着手日の通知(これから来る着手日で、締め切りより前のものだけ)
+            if let start = task.start, start > now, start < task.due {
+                individual.append((task, start, true))
             }
         }
         individual.sort { $0.fire < $1.fire }
 
-        var result: [PlannedNotification] = individual.prefix(settings.maxIndividual).map { item in
-            PlannedNotification(
+        // 朝のまとめ通知(今日か明日が締め切りの提出物がある朝だけ)
+        let morningPlans = settings.morningEnabled
+            ? morningDigests(tasks: sortedTasks, settings: settings, now: now, calendar: calendar)
+            : []
+
+        // 個別通知の枠。朝のまとめと、空けておく件数の分だけ減らす(合計が 64 件を超えないように)
+        let individualLimit = max(0, settings.maxIndividual - morningPlans.count - settings.reservedSlots)
+        var result: [PlannedNotification] = individual.prefix(individualLimit).map { item in
+            let deadline = "締め切り \(DeadlineText.dateTime(item.task.due, calendar: calendar))(\(DeadlineText.remaining(until: item.task.due, now: item.fire)))"
+            if item.isStart {
+                return PlannedNotification(
+                    identifier: "\(individualPrefix)\(item.task.id)-start",
+                    fireDate: item.fire,
+                    title: taskTitle(item.task),
+                    body: "そろそろ取りかかる予定の日時です。\(deadline)",
+                    kind: .start(taskID: item.task.id))
+            }
+            return PlannedNotification(
                 identifier: "\(individualPrefix)\(item.task.id)-\(minuteKey(item.fire))",
                 fireDate: item.fire,
                 title: taskTitle(item.task),
-                body: "締め切り \(DeadlineText.dateTime(item.task.due, calendar: calendar))(\(DeadlineText.remaining(until: item.task.due, now: item.fire)))",
+                body: deadline,
                 kind: .individual(taskID: item.task.id))
         }
+        result.append(contentsOf: morningPlans)
 
         // 3. 署名の期限切れのお知らせ(期限の前日、まとめ通知と同じ時刻)
         var expiryNightKey: Int?
@@ -164,18 +202,60 @@ public enum NotificationPlanner {
 
     /// これから先のまとめ通知の時刻(今日の分がまだなら今日から)
     static func nightlyTimes(settings: PlannerSettings, now: Date, calendar: Calendar) -> [Date] {
+        dailyTimes(hour: settings.nightlyHour, minute: settings.nightlyMinute,
+                   count: settings.nightsAhead, now: now, calendar: calendar)
+    }
+
+    /// 毎日の決まった時刻を、これから先の count 回分だけ並べる(今日の分がまだなら今日から)
+    static func dailyTimes(hour: Int, minute: Int, count: Int, now: Date, calendar: Calendar) -> [Date] {
         var times: [Date] = []
         let today = calendar.startOfDay(for: now)
         var offset = 0
-        while times.count < settings.nightsAhead && offset <= settings.nightsAhead + 1 {
+        while times.count < count && offset <= count + 1 {
             if let day = calendar.date(byAdding: .day, value: offset, to: today),
-               let t = calendar.date(bySettingHour: settings.nightlyHour, minute: settings.nightlyMinute, second: 0, of: day),
+               let t = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day),
                t > now {
                 times.append(t)
             }
             offset += 1
         }
         return times
+    }
+
+    /// 朝のまとめ通知。その日か翌日が締め切りの提出物がある朝だけ作る。
+    /// 例: タイトル「今日締め切り 2 件・明日 1 件」、本文は締め切りが近い順に最大 4 件
+    static func morningDigests(tasks sortedTasks: [TaskSnapshot], settings: PlannerSettings,
+                               now: Date, calendar: Calendar) -> [PlannedNotification] {
+        let mornings = dailyTimes(hour: settings.morningHour, minute: settings.morningMinute,
+                                  count: settings.morningsAhead, now: now, calendar: calendar)
+        var result: [PlannedNotification] = []
+        for morning in mornings {
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: morning) else { continue }
+            // 今日の分は、この朝より後に締め切りが来るものだけ(すでに過ぎたものは期限切れに数える)
+            let today = sortedTasks.filter { $0.due > morning && calendar.isDate($0.due, inSameDayAs: morning) }
+            let tomorrow = sortedTasks.filter { calendar.isDate($0.due, inSameDayAs: nextDay) }
+            if today.isEmpty && tomorrow.isEmpty { continue }
+            let overdueCount = sortedTasks.filter { $0.due <= morning }.count
+
+            var title = "今日締め切り \(today.count) 件・明日 \(tomorrow.count) 件"
+            if overdueCount > 0 { title += "(期限切れ \(overdueCount))" }
+
+            let listed = today + tomorrow
+            var lines = listed.prefix(settings.maxSummaryLines).map { t -> String in
+                let name = t.subject.isEmpty ? t.title : "\(t.subject) \(t.title)"
+                return "・ \(DeadlineText.relativeDay(t.due, now: morning, calendar: calendar)) \(name)"
+            }
+            let rest = listed.count - min(listed.count, settings.maxSummaryLines)
+            if rest > 0 { lines.append("ほか \(rest) 件") }
+
+            result.append(PlannedNotification(
+                identifier: morningPrefix + dayKey(morning, calendar: calendar),
+                fireDate: morning,
+                title: title,
+                body: lines.joined(separator: "\n"),
+                kind: .morning))
+        }
+        return result
     }
 
     static func taskTitle(_ task: TaskSnapshot) -> String {

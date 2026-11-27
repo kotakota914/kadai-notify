@@ -15,6 +15,7 @@ struct AssignmentListView: View {
     @State private var editing: Assignment?
     @State private var showingNew = false
     @State private var showingImport = false
+    @State private var showingSettings = false
     @State private var showDone = false
 
     var body: some View {
@@ -30,12 +31,17 @@ struct AssignmentListView: View {
                         Label("取り込み", systemImage: "square.and.arrow.down")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                // 右上: 歯車(設定)と +(追加)。書いた順に左から並ぶので、+ がいちばん右に来る
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showingSettings = true } label: {
+                        Label("設定", systemImage: "gearshape")
+                    }
                     Button { showingNew = true } label: {
                         Label("追加", systemImage: "plus")
                     }
                 }
             }
+            .sheet(isPresented: $showingSettings) { SettingsView() }
             .sheet(isPresented: $showingNew) { AssignmentEditView(assignment: nil) }
             .sheet(item: $editing) { assignment in AssignmentEditView(assignment: assignment) }
             .sheet(isPresented: $showingImport) { ImportView() }
@@ -94,6 +100,16 @@ struct AssignmentListView: View {
         AssignmentRow(assignment: assignment, now: now) { toggleDone(assignment) }
             .contentShape(Rectangle())
             .onTapGesture { editing = assignment }
+            // 長押し: 提出物の詳しい内容と、その科目の評価方法(配点)をカードで出す
+            .contextMenu {
+                Button { editing = assignment } label: { Label("編集", systemImage: "pencil") }
+                Button { toggleDone(assignment) } label: {
+                    Label(assignment.isDone ? "未完了に戻す" : "完了にする",
+                          systemImage: assignment.isDone ? "arrow.uturn.backward" : "checkmark")
+                }
+            } preview: {
+                AssignmentPeekView(assignment: assignment, now: now)
+            }
             .swipeActions(edge: .leading) {
                 Button { toggleDone(assignment) } label: {
                     Label(assignment.isDone ? "未完了に戻す" : "完了",
@@ -109,15 +125,7 @@ struct AssignmentListView: View {
     }
 
     private func toggleDone(_ assignment: Assignment) {
-        withAnimation {
-            assignment.isDone.toggle()
-            assignment.completedAt = assignment.isDone ? .now : nil
-        }
-        if assignment.isDone {
-            NotificationService.removeDelivered(forTaskKey: assignment.key)
-        }
-        try? context.save()
-        Refresher.refresh(context)
+        AssignmentActions.toggleDone(assignment, in: context)
     }
 
     private func delete(_ assignment: Assignment) {
@@ -153,6 +161,14 @@ struct AssignmentRow: View {
                     Text(assignment.subject?.name ?? "科目なし")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    // 種類(課題・小テストなど)を小さな札で出す
+                    Text(assignment.kind.label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.15), in: Capsule())
+                    if let rank = assignment.rank { RankBadge(rank: rank) }
                     if assignment.template != nil {
                         Image(systemName: "repeat")
                             .font(.caption2)
@@ -178,6 +194,68 @@ struct AssignmentRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// 提出物を長押ししたときに出すカード。締め切り・種類・ランクと、その科目の評価方法(配点)を見せる
+struct AssignmentPeekView: View {
+    let assignment: Assignment
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hex: assignment.subject?.colorHex ?? "#999999"))
+                        .frame(width: 10, height: 10)
+                    Text(assignment.subject?.name ?? "科目なし")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Text(assignment.title)
+                    .font(.title3.bold())
+                HStack(spacing: 6) {
+                    if let rank = assignment.rank { RankBadge(rank: rank) }
+                    Text(assignment.kind.label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("締め切り").font(.caption.bold()).foregroundStyle(.secondary)
+                Text("\(DeadlineText.dateTime(assignment.dueDate, calendar: .current))(\(DeadlineText.remaining(until: assignment.dueDate, now: now)))")
+                    .font(.subheadline)
+            }
+
+            if let start = assignment.startDate {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("着手日").font(.caption.bold()).foregroundStyle(.secondary)
+                    Text(DeadlineText.dateTime(start, calendar: .current)).font(.subheadline)
+                }
+            }
+
+            if !assignment.memo.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("メモ").font(.caption.bold()).foregroundStyle(.secondary)
+                    Text(assignment.memo).font(.subheadline)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("評価方法(配点)").font(.caption.bold()).foregroundStyle(.secondary)
+                if let note = assignment.subject?.gradingNote, !note.isEmpty {
+                    Text(note).font(.subheadline)
+                } else {
+                    Text("まだ登録されていません。「科目・繰り返し」タブで科目を開くと書き込めます。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(18)
+        .frame(width: 330, alignment: .leading)
     }
 }
 

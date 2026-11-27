@@ -15,13 +15,27 @@ struct ImportView: View {
         var selected: Bool
     }
 
-    @State private var text = ""
+    @State private var text: String
     @State private var candidates: [Candidate] = []
     @State private var errors: [ImportError] = []
+    /// 「#subject 科目名」の行で指定された科目のうち、まだ登録されていないもの
+    @State private var newSubjects: [String] = []
+    /// 同じく、すでに登録されていたものの数
+    @State private var knownSubjectCount = 0
+    /// 「#grading 科目名 | 評価方法」の行で指定された、科目の評価方法(配点)
+    @State private var gradings: [ImportGrading] = []
     @State private var parsed = false
     @State private var headerMissing = false
 
     private var selectedCount: Int { candidates.filter(\.selected).count }
+    /// 提出物のほかに、登録する科目や評価方法があるか
+    private var hasExtras: Bool { !newSubjects.isEmpty || !gradings.isEmpty }
+
+    /// - Parameter initialText: 最初から入れておくテキスト。Mac から送られてきたファイルの中身を渡すと、
+    ///   画面を開いた時点で読み取りまで済ませる。何も渡さなければ空の画面から始まる。
+    init(initialText: String = "") {
+        _text = State(initialValue: initialText)
+    }
 
     var body: some View {
         NavigationStack {
@@ -42,7 +56,7 @@ struct ImportView: View {
                 } header: {
                     Text("取り込むテキスト")
                 } footer: {
-                    Text("Mac の Claude in Chrome が出力した「#kadai v1」で始まる文字をコピーし、ここに貼り付けます。頼み方は「設定」タブからコピーできます。")
+                    Text("Mac の Claude in Chrome が出力した「#kadai v1」で始まる文字をコピーし、ここに貼り付けます。頼み方は、提出物の画面の右上にある歯車(設定)からコピーできます。")
                 }
 
                 if parsed {
@@ -66,6 +80,40 @@ struct ImportView: View {
                         }
                     }
 
+                    if !newSubjects.isEmpty || knownSubjectCount > 0 {
+                        Section {
+                            ForEach(newSubjects, id: \.self) { name in
+                                Label(name, systemImage: "plus.circle")
+                            }
+                            if knownSubjectCount > 0 {
+                                Text("登録済みの科目 \(knownSubjectCount) 件はそのままにします")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } header: {
+                            Text("追加する科目(\(newSubjects.count) 件)")
+                        } footer: {
+                            Text("提出物を追加するときに、科目の一覧から選べるようになります。色はあとで変えられます。")
+                        }
+                    }
+
+                    if !gradings.isEmpty {
+                        Section {
+                            ForEach(gradings, id: \.self) { grading in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(grading.subject).font(.subheadline.bold())
+                                    Text(grading.note)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } header: {
+                            Text("評価方法(配点)を登録する科目(\(gradings.count) 件)")
+                        } footer: {
+                            Text("提出物を長押しすると見られます。すでに書いてある評価方法は、この内容で置き換わります。")
+                        }
+                    }
+
                     if !errors.isEmpty {
                         Section("読み取れなかった行(登録しません)") {
                             ForEach(errors, id: \.lineNumber) { error in
@@ -80,20 +128,26 @@ struct ImportView: View {
                         }
                     }
 
-                    if !headerMissing && candidates.isEmpty && errors.isEmpty {
+                    if !headerMissing && candidates.isEmpty && errors.isEmpty
+                        && newSubjects.isEmpty && knownSubjectCount == 0 && gradings.isEmpty {
                         Section { Text("提出物の行がありませんでした。") }
                     }
                 }
             }
             .navigationTitle("取り込み")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // Mac から送られてきたテキストが最初から入っているときは、すぐ読み取る
+                if !parsed && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parse() }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("\(selectedCount) 件を登録") { commit() }
-                        .disabled(selectedCount == 0)
+                    // 提出物がなく、科目や評価方法だけのときは「登録」と出す
+                    Button(selectedCount == 0 && hasExtras ? "登録" : "\(selectedCount) 件を登録") { commit() }
+                        .disabled(selectedCount == 0 && !hasExtras)
                 }
             }
         }
@@ -118,10 +172,24 @@ struct ImportView: View {
         }
         errors = result.errors
         headerMissing = !result.headerFound
+
+        // 「#subject」の行の科目を、まだない科目と登録済みの科目に分ける
+        let knownKeys = Set(((try? context.fetch(FetchDescriptor<Subject>())) ?? []).map { ImportMatcher.key($0.name) })
+        newSubjects = result.subjects.filter { !knownKeys.contains(ImportMatcher.key($0)) }
+        knownSubjectCount = result.subjects.count - newSubjects.count
+        gradings = result.gradings
         parsed = true
     }
 
     private func commit() {
+        // 先に科目を作る(提出物がなくても、科目の一覧から選べるようにするため)
+        for name in newSubjects {
+            _ = SubjectService.findOrCreate(name: name, in: context)
+        }
+        // 科目の評価方法(配点)を書き込む(科目がなければ作る)
+        for grading in gradings {
+            SubjectService.findOrCreate(name: grading.subject, in: context)?.gradingNote = grading.note
+        }
         let existing = (try? context.fetch(FetchDescriptor<Assignment>())) ?? []
         for candidate in candidates where candidate.selected {
             let item = candidate.item

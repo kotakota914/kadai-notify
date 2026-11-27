@@ -7,6 +7,7 @@ import KadaiCore
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     @State private var settings = AppSettings.load()
     @State private var authorization: UNAuthorizationStatus = .notDetermined
@@ -32,6 +33,16 @@ struct SettingsView: View {
                     }
                 } footer: {
                     Text("未完了の提出物が 1 件でもある限り、毎晩まとめて知らせます。同じ時刻の個別の通知はこの 1 通にまとめます。")
+                }
+
+                Section {
+                    Toggle("朝のまとめ通知", isOn: $settings.morningEnabled)
+                    if settings.morningEnabled {
+                        DatePicker("時刻", selection: timeBinding(minutesOfDay: $settings.morningMinutes),
+                                   displayedComponents: .hourAndMinute)
+                    }
+                } footer: {
+                    Text("今日か明日が締め切りの提出物がある朝だけ、「今日締め切り ○ 件・明日 ○ 件」と知らせます。")
                 }
 
                 Section {
@@ -79,6 +90,13 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("設定")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // 提出物の画面の歯車ボタンから、下から出てくる画面(シート)として開くので、閉じるボタンを付ける
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
             .task { await loadStatus() }
             .onChange(of: settings) { _, newValue in
                 newValue.save()

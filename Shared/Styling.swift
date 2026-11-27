@@ -23,3 +23,30 @@ extension DueGroup {
         }
     }
 }
+
+extension AssignmentRank {
+    /// ランクの札の色(S = 赤、A = オレンジ、B = 青、C = 灰色)
+    var color: Color {
+        switch self {
+        case .s: return .red
+        case .a: return .orange
+        case .b: return .blue
+        case .c: return .gray
+        }
+    }
+}
+
+/// ランクを表す小さな札(例: 赤地に白い「S」)
+struct RankBadge: View {
+    let rank: AssignmentRank
+
+    var body: some View {
+        Text(rank.label)
+            .font(.caption2.bold())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(rank.color, in: Capsule())
+            .accessibilityLabel("ランク \(rank.label)")
+    }
+}

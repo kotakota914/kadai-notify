@@ -96,6 +96,8 @@ struct SubjectEditView: View {
 
     @State private var name: String
     @State private var colorHex: String
+    /// 評価方法(配点)のメモ
+    @State private var gradingNote: String
     @State private var useCustomRules: Bool
     @State private var rules: [ReminderRule]
     @State private var message: String?
@@ -106,6 +108,7 @@ struct SubjectEditView: View {
         self.subject = subject
         _name = State(initialValue: subject?.name ?? "")
         _colorHex = State(initialValue: subject?.colorHex ?? SubjectPalette.colors[5])
+        _gradingNote = State(initialValue: subject?.gradingNote ?? "")
         _useCustomRules = State(initialValue: subject?.reminderRules != nil)
         _rules = State(initialValue: subject?.reminderRules ?? [])
     }
@@ -133,6 +136,15 @@ struct SubjectEditView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                Section {
+                    TextField("例: レポート 40% / 小テスト 30% / 期末試験 30%", text: $gradingNote, axis: .vertical)
+                        .lineLimit(2...8)
+                } header: {
+                    Text("評価方法(配点)")
+                } footer: {
+                    Text("学習支援計画書(シラバス)の配点を書いておくと、提出物を長押ししたときに見られます。")
                 }
 
                 Section {
@@ -198,6 +210,7 @@ struct SubjectEditView: View {
         }
         target.name = trimmed
         target.colorHex = colorHex
+        target.gradingNote = gradingNote.trimmingCharacters(in: .whitespacesAndNewlines)
         target.reminderRules = useCustomRules ? rules : nil
         try? context.save()
         Refresher.refresh(context)
@@ -259,8 +272,7 @@ struct TemplateEditView: View {
         NavigationStack {
             Form {
                 Section("科目") {
-                    TextField("科目名", text: $subjectName)
-                    SubjectChips(selection: $subjectName)
+                    SubjectPicker(name: $subjectName)
                 }
 
                 Section {

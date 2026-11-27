@@ -27,8 +27,23 @@ public struct ImportError: Hashable, Sendable {
     public var reason: String
 }
 
+/// 「#grading 科目名 | 評価方法」の行で指定された、科目の評価方法(配点)
+public struct ImportGrading: Hashable, Sendable {
+    public var subject: String
+    public var note: String
+
+    public init(subject: String, note: String) {
+        self.subject = subject
+        self.note = note
+    }
+}
+
 public struct ImportResult: Sendable {
     public var items: [ImportItem]
+    /// 「#subject 科目名」の行で指定された科目(課題がなくても登録しておきたい科目)。同じ名前は 1 回だけ
+    public var subjects: [String] = []
+    /// 「#grading 科目名 | 評価方法」の行。同じ科目が 2 回出てきたら後のものを使う
+    public var gradings: [ImportGrading] = []
     public var errors: [ImportError]
     /// 「#kadai v1」の行が見つかったか
     public var headerFound: Bool
@@ -72,12 +87,38 @@ public enum ImportParser {
         }
 
         var items: [ImportItem] = []
+        var subjects: [String] = []
+        var gradings: [ImportGrading] = []
         var errors: [ImportError] = []
 
         for index in (headerIndex + 1)..<lines.count {
             let raw = lines[index]
             let lineNumber = index + 1
             let line = normalize(raw).trimmingCharacters(in: .whitespaces)
+
+            // 「#subject 科目名」の行: 課題がなくても、その科目を登録する
+            if let name = subjectName(fromDirective: line) {
+                if !name.isEmpty, !subjects.contains(where: { ImportMatcher.key($0) == ImportMatcher.key(name) }) {
+                    subjects.append(name)
+                }
+                continue
+            }
+
+            // 「#grading 科目名 | 評価方法」の行: 科目の評価方法(配点)を登録する
+            if line.lowercased().hasPrefix("#grading ") || line.hasPrefix("#評価 ") {
+                let body = line.drop(while: { $0 != " " }).trimmingCharacters(in: .whitespaces)
+                // 評価方法の文の中に「|」があってもよいように、最初の 1 つだけで区切る
+                let parts = body.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty {
+                    gradings.removeAll { ImportMatcher.key($0.subject) == ImportMatcher.key(parts[0]) }
+                    gradings.append(ImportGrading(subject: parts[0], note: parts[1]))
+                } else {
+                    errors.append(ImportError(lineNumber: lineNumber, line: raw,
+                                              reason: "評価方法は「#grading 科目名 | 評価方法」の形で書きます"))
+                }
+                continue
+            }
 
             // 空行・コメント行・コードブロックの記号(```)は読み飛ばす
             if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("```") { continue }
@@ -112,7 +153,20 @@ public enum ImportParser {
             items.append(ImportItem(subject: subject, title: title, due: due, hasTime: hasTime,
                                     memo: memo, lineNumber: lineNumber))
         }
-        return ImportResult(items: items, errors: errors, headerFound: true)
+        return ImportResult(items: items, subjects: subjects, gradings: gradings, errors: errors, headerFound: true)
+    }
+
+    /// 「#subject 線形代数学」「#科目 線形代数学」の行なら科目名を返す。それ以外の行は nil。
+    /// 「#」で始まる行は古い版では読み飛ばされるので、形式(v1)はそのままで足せる。
+    static func subjectName(fromDirective line: String) -> String? {
+        for prefix in ["#subject", "#科目"] {
+            guard line.lowercased().hasPrefix(prefix) else { continue }
+            let rest = line.dropFirst(prefix.count)
+            // 「#subject線形代数学」のように区切りがない行は、ふつうのコメントとして扱う
+            guard let first = rest.first, first == " " || first == ":" else { return rest.isEmpty ? "" : nil }
+            return rest.drop(while: { $0 == " " || $0 == ":" }).trimmingCharacters(in: .whitespaces)
+        }
+        return nil
     }
 
     /// 「2026-12-03 17:00」「2026/12/3」「2026-12-03T09:00」などを読む。

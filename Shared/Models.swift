@@ -16,6 +16,8 @@ final class Subject {
     /// 科目ごとの通知ルール(JSON)。nil なら全体の設定を使う
     var reminderRulesData: Data?
     var createdAt: Date = Date()
+    /// 評価方法(配点)のメモ。例: 「レポート 40% / 小テスト 30% / 期末試験 30%」。空なら未登録
+    var gradingNote: String = ""
 
     @Relationship(deleteRule: .nullify, inverse: \Assignment.subject)
     var assignments: [Assignment]? = []
@@ -60,6 +62,13 @@ final class Assignment {
     var reminderRulesData: Data?
     var sourceRaw: String = AssignmentSource.manual.rawValue
     var createdAt: Date = Date()
+    /// 種類(課題・小テストなど)。nil なら、まだ選んでいないので課題名から推測する。
+    /// あとから足した項目なので、古いデータを読めるように「なくてもよい」(nil を許す)形にしている
+    var kindRaw: String?
+    /// ランク(重要さ。S・A・B・C)。nil なら付けていない
+    var rankRaw: String?
+    /// 着手日(取りかかり始める予定の日時)。nil なら決めていない
+    var startDate: Date?
 
     var subject: Subject?
     var template: RecurringTemplate?
@@ -78,6 +87,18 @@ final class Assignment {
 
     var source: AssignmentSource {
         AssignmentSource(rawValue: sourceRaw) ?? .manual
+    }
+
+    /// 種類。自分で選んでいればそれを、選んでいなければ課題名からの推測を返す
+    var kind: AssignmentKind {
+        get { kindRaw.flatMap(AssignmentKind.init(rawValue:)) ?? AssignmentKind.guess(fromTitle: title) }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    /// ランク(重要さ)。付けていなければ nil
+    var rank: AssignmentRank? {
+        get { rankRaw.flatMap(AssignmentRank.init(rawValue:)) }
+        set { rankRaw = newValue?.rawValue }
     }
 
     /// 通知の識別に使う文字列

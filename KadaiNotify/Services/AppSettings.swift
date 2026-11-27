@@ -9,6 +9,10 @@ struct AppSettings: Equatable {
     var nightlyEnabled: Bool = true
     /// まとめ通知の時刻(0:00 からの分。21:00 = 1260)
     var nightlyMinutes: Int = 21 * 60
+    /// 朝のまとめ通知(今日・明日が締め切りの提出物がある朝だけ)
+    var morningEnabled: Bool = true
+    /// 朝のまとめ通知の時刻(0:00 からの分。7:30 = 450)
+    var morningMinutes: Int = 7 * 60 + 30
     /// アイコンのバッジ
     var badgeEnabled: Bool = true
     /// 時刻がわからない締め切りの時刻(8:50 = 530)
@@ -18,6 +22,8 @@ struct AppSettings: Equatable {
         static let globalRules = "globalReminderRules"
         static let nightlyEnabled = "nightlyEnabled"
         static let nightlyMinutes = "nightlyMinutes"
+        static let morningEnabled = "morningEnabled"
+        static let morningMinutes = "morningMinutes"
         static let badgeEnabled = "badgeEnabled"
         static let defaultDueMinutes = "defaultDueMinutes"
     }
@@ -33,6 +39,12 @@ struct AppSettings: Equatable {
         if defaults.object(forKey: Key.nightlyMinutes) != nil {
             settings.nightlyMinutes = defaults.integer(forKey: Key.nightlyMinutes)
         }
+        if defaults.object(forKey: Key.morningEnabled) != nil {
+            settings.morningEnabled = defaults.bool(forKey: Key.morningEnabled)
+        }
+        if defaults.object(forKey: Key.morningMinutes) != nil {
+            settings.morningMinutes = defaults.integer(forKey: Key.morningMinutes)
+        }
         if defaults.object(forKey: Key.badgeEnabled) != nil {
             settings.badgeEnabled = defaults.bool(forKey: Key.badgeEnabled)
         }
@@ -46,6 +58,8 @@ struct AppSettings: Equatable {
         defaults.set(ReminderRule.encodeList(globalRules), forKey: Key.globalRules)
         defaults.set(nightlyEnabled, forKey: Key.nightlyEnabled)
         defaults.set(nightlyMinutes, forKey: Key.nightlyMinutes)
+        defaults.set(morningEnabled, forKey: Key.morningEnabled)
+        defaults.set(morningMinutes, forKey: Key.morningMinutes)
         defaults.set(badgeEnabled, forKey: Key.badgeEnabled)
         defaults.set(defaultDueMinutes, forKey: Key.defaultDueMinutes)
     }
@@ -56,6 +70,9 @@ struct AppSettings: Equatable {
         settings.nightlyEnabled = nightlyEnabled
         settings.nightlyHour = nightlyMinutes / 60
         settings.nightlyMinute = nightlyMinutes % 60
+        settings.morningEnabled = morningEnabled
+        settings.morningHour = morningMinutes / 60
+        settings.morningMinute = morningMinutes % 60
         return settings
     }
 
